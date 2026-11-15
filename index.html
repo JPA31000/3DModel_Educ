@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Model Educ Studio — atelier de modélisation 3D</title>
+<meta name="description" content="Un atelier de modélisation 3D pour l’impression 3D : ruban d’outils, fenêtre de propriétés, arborescence, contrôle d’imprimabilité, export STL. Outil pédagogique.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23233a5e'/%3E%3Cpath d='M16 6l9 5v10l-9 5-9-5V11z' fill='none' stroke='%23fb923c' stroke-width='2' stroke-linejoin='round'/%3E%3Cpath d='M7 11l9 5 9-5M16 16v10' fill='none' stroke='%23fb923c' stroke-width='2'/%3E%3C/svg%3E">
+<style>
+:root{
+  --fond:#f0f0f0; --barre:#e4e6e8; --carte:#ffffff; --encre:#1d242b; --gris:#57616b; --trait:#c9cdd2; --trait2:#e3e5e8;
+  --marine:#233a5e; --marine2:#31507f; --accent:#c2410c; --accentFonce:#9a3412; --accentPale:#fff1e6; --bleu:#0b6b7d; --bleuPale:#e3f1f3;
+  --ok:#2b7a3d; --okPale:#e6f3e8; --alerte:#a45a06; --alertePale:#fdf1dc; --erreur:#b42318; --erreurPale:#fde8e6;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{font:14.5px/1.4 "Segoe UI",system-ui,-apple-system,sans-serif;color:var(--encre);background:var(--fond);display:flex;flex-direction:column;overflow:hidden}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+h1,h2,h3,h4,h5,p{margin:0}
+:focus-visible{outline:2px solid var(--marine2);outline-offset:1px}
+
+/* ---------- barre des onglets ---------- */
+.onglets{display:flex;align-items:stretch;background:var(--barre);border-bottom:1px solid var(--trait);flex:none;height:36px;position:relative;z-index:12}
+.onglets button{background:none;border:0;padding:0 18px;font-size:15px;color:#38424b;border-top:3px solid transparent;white-space:nowrap}
+.onglets button:hover{background:#eef0f2}
+.onglets button.actif{background:var(--carte);border-top-color:var(--accent);font-weight:600;color:var(--encre)}
+.onglets #btnFichier{background:var(--marine);color:#fff;font-weight:600;border-top:0;padding:0 22px}
+.onglets #btnFichier:hover,.onglets #btnFichier[aria-expanded=true]{background:var(--marine2)}
+.onglets .titre{margin-left:auto;display:flex;align-items:center;gap:8px;padding:0 10px;min-width:0}
+.onglets .titre b{font-weight:600;color:var(--marine);white-space:nowrap}
+.onglets .titre span{color:var(--gris);font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.onglets .rapide{display:flex;align-items:center;gap:2px;padding-right:8px;flex:none}
+.onglets .rapide button{padding:0 9px;height:28px;border:1px solid transparent;border-radius:5px;font-size:13.5px;display:flex;align-items:center;gap:5px}
+.onglets .rapide button:hover:not(:disabled){background:#fff;border-color:var(--trait)}
+.onglets .rapide button:disabled{opacity:.38;cursor:default}
+.onglets .rapide svg{width:17px;height:17px}
+#menuFichier{position:absolute;left:0;top:36px;background:var(--carte);border:1px solid var(--trait);box-shadow:0 12px 30px rgba(0,0,0,.2);min-width:300px;display:none;z-index:15;padding:5px 0}
+#menuFichier.ouvert{display:block}
+#menuFichier button{display:flex;justify-content:space-between;gap:20px;width:100%;text-align:left;background:none;border:0;padding:8px 16px;font-size:14.5px}
+#menuFichier button:hover{background:var(--bleuPale)}
+#menuFichier button small{color:var(--gris)}
+#menuFichier hr{border:0;border-top:1px solid var(--trait2);margin:5px 0}
+#menuFichier .rubrique{font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--gris);padding:6px 16px 2px}
+
+/* ---------- ruban ---------- */
+#ruban{display:flex;align-items:stretch;background:var(--carte);border-bottom:1px solid var(--trait);flex:none;height:92px;overflow-x:auto;overflow-y:hidden;padding:0 4px}
+.groupe{display:flex;flex-direction:column;border-right:1px solid var(--trait2);padding:4px 6px 0;flex:none}
+.groupe .outils{display:flex;align-items:stretch;gap:2px;flex:1}
+.groupe .nom{font-size:11.5px;color:var(--gris);text-align:center;padding:1px 0 3px;white-space:nowrap}
+.outil{display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:2px;min-width:58px;max-width:78px;background:none;border:1px solid transparent;border-radius:5px;padding:5px 5px 2px;font-size:12.5px;line-height:1.15;text-align:center}
+.outil svg{width:30px;height:30px;flex:none;stroke:var(--marine);fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.outil:hover:not(:disabled){background:#f1f4f7;border-color:var(--trait)}
+.outil.actif{background:var(--accentPale);border-color:var(--accent)}
+.outil.actif svg{stroke:var(--accent)}
+.outil:disabled{opacity:.36;cursor:default}
+.groupe .reglage{display:flex;flex-direction:column;justify-content:center;gap:4px;padding:0 6px;font-size:13px;min-width:170px}
+.groupe .reglage select{border:1px solid var(--trait);border-radius:5px;padding:2px 4px;background:#fff}
+.groupe .reglage input[type=range]{width:100%;accent-color:var(--accent);margin:0}
+.groupe .reglage .ligne{display:flex;justify-content:space-between;align-items:center;gap:6px}
+
+/* ---------- zone de travail ---------- */
+main{flex:1;min-height:0;display:grid;grid-template-columns:316px minmax(0,1fr) auto}
+.gauche{display:flex;flex-direction:column;min-height:0;border-right:1px solid var(--trait);background:var(--fond)}
+.volet{display:flex;flex-direction:column;min-height:0}
+.volet>h2{font-size:14.5px;font-weight:600;padding:7px 12px;background:var(--barre);border-bottom:1px solid var(--trait);flex:none;display:flex;justify-content:space-between;align-items:center}
+.volet>h2 small{font-weight:400;color:var(--gris);font-size:12.5px}
+#voletProp{flex:1 1 60%}
+#voletArbre{flex:0 1 24%;min-height:112px;border-top:1px solid var(--trait)}
+#proprietes{flex:1;min-height:0;overflow:auto;padding:8px 8px 14px}
+details.bloc{background:var(--carte);border:1px solid var(--trait);border-left:4px solid var(--accent);margin-bottom:8px}
+details.bloc>summary{cursor:pointer;padding:7px 10px;font-size:12.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#38424b;user-select:none}
+details.bloc>.dedans{padding:2px 10px 10px}
+details.bloc.forme{border-left-color:var(--bleu)}
+.grille{display:grid;grid-template-columns:auto 1fr;gap:5px 8px;align-items:center;font-size:13.5px}
+.grille label{color:var(--gris)}
+.grille input,.grille select{width:100%;border:1px solid var(--trait);border-radius:4px;padding:3px 6px;background:#fff;min-width:0}
+.grille .trois{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
+.grille .trois label{display:flex;align-items:center;gap:3px;color:var(--gris);font-size:12.5px}
+.grille .trois input{padding:3px 4px;-moz-appearance:textfield;appearance:textfield}
+.grille .trois input::-webkit-outer-spin-button,.grille .trois input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.grille .valeur{font-variant-numeric:tabular-nums}
+.pastilles{display:flex;gap:5px}
+.pastilles button{width:22px;height:22px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px var(--trait);padding:0}
+.pastilles button.actif{box-shadow:0 0 0 2px var(--encre)}
+#proprietes h4{font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--gris);font-weight:600;margin:12px 0 6px;padding-top:8px;border-top:1px solid var(--trait2)}
+#proprietes .note{background:var(--bleuPale);border-radius:6px;padding:7px 9px;font-size:13.5px;margin-bottom:8px}
+#proprietes .aide{font-size:12.5px;color:var(--gris);margin:3px 0 7px}
+#proprietes .info{font-size:13.5px;font-variant-numeric:tabular-nums;margin:4px 0 7px}
+.curseur{margin:7px 0 2px}
+.curseur .tete{display:flex;justify-content:space-between;gap:8px;font-size:13.5px}
+.curseur output{font-variant-numeric:tabular-nums;font-weight:600;white-space:nowrap}
+.curseur input[type=range]{width:100%;margin:2px 0 0;accent-color:var(--accent)}
+.rangee{display:flex;flex-wrap:wrap;gap:4px;margin:6px 0}
+.rangee button{background:var(--carte);border:1px solid var(--trait);border-radius:5px;padding:5px 9px;font-size:13.5px;flex:1 1 auto}
+.rangee button:hover:not(:disabled){border-color:var(--gris)}
+.rangee button:disabled{opacity:.4;cursor:default}
+.rangee button.fort{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.rangee button.fort:hover:not(:disabled){background:var(--accentFonce)}
+.rangee button.actif{background:var(--accentPale);border-color:var(--accent);color:var(--accentFonce);font-weight:600}
+.rangee button.danger{color:var(--erreur)}
+.choix{margin:7px 0}
+.choix .nom{font-size:13.5px;margin-bottom:3px}
+.choix .rangee{margin:0}
+.case{display:flex;align-items:flex-start;gap:8px;font-size:13.5px;margin:5px 0}
+.case input{margin-top:3px;accent-color:var(--accent);width:15px;height:15px;flex:none}
+.relations{background:var(--fond);border-radius:6px;padding:2px 9px 8px;margin-top:8px}
+.relations h4{border:0!important;margin-top:7px!important;padding-top:0!important}
+.relation{font-size:13px;font-variant-numeric:tabular-nums;padding:2px 0}
+.contrainte{font-size:13px;color:var(--alerte);padding:3px 0;font-weight:500}
+.vide{color:var(--gris);font-size:13.5px;padding:8px 4px}
+
+#arbre{flex:1;min-height:0;overflow:auto;padding:4px 0;background:var(--carte)}
+#arbre .ligne{display:flex;align-items:center;gap:6px;padding:0 6px 0 8px;border-left:3px solid transparent}
+#arbre .ligne.actif{background:var(--accentPale);border-left-color:var(--accent)}
+#arbre .ligne .nomObj{flex:1;min-width:0;text-align:left;background:none;border:0;padding:5px 2px;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:7px}
+#arbre .ligne svg{width:19px;height:19px;flex:none;stroke:var(--marine);fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+#arbre .ligne.cache .nomObj{color:#8b949c;font-style:italic}
+#arbre .etq{font-size:11px;color:var(--bleu);border:1px solid #9fc9d1;border-radius:9px;padding:0 6px;flex:none}
+#arbre .oeil{background:none;border:0;padding:3px;border-radius:4px;display:flex}
+#arbre .oeil:hover{background:var(--trait2)}
+
+.scene{position:relative;min-width:0;min-height:0;background:#eceef0}
+#vue{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
+#bulle{position:absolute;left:50%;top:14px;transform:translateX(-50%);background:var(--encre);color:#fff;padding:8px 15px;border-radius:7px;font-size:14px;max-width:76%;opacity:0;transition:opacity .25s;pointer-events:none;z-index:3;text-align:center}
+#bulle.montre{opacity:1}
+#bulle.alerte{background:var(--alerte)}
+#consigne{position:absolute;left:10px;top:10px;background:var(--accent);color:#fff;font-size:13.5px;padding:5px 11px;border-radius:5px;display:none;max-width:60%}
+#consigne.montre{display:block}
+/* cube de vues */
+#cube{position:absolute;right:16px;top:14px;width:84px;height:84px;perspective:420px;z-index:2}
+#cube .corps{position:absolute;left:14px;top:14px;width:56px;height:56px;transform-style:preserve-3d}
+#cube button{position:absolute;inset:0;background:rgba(255,255,255,.93);border:1px solid #8a949e;font-size:10.5px;color:#38424b;padding:0;backface-visibility:hidden}
+#cube button:hover{background:#ffe2c7;color:var(--accentFonce);border-color:var(--accent)}
+#cubeIso{position:absolute;right:10px;top:100px;background:rgba(255,255,255,.92);border:1px solid var(--trait);border-radius:5px;font-size:12px;padding:2px 8px;z-index:2}
+#cubeIso:hover{border-color:var(--gris)}
+
+/* ---------- volet impression ---------- */
+#voletImp{width:300px;border-left:1px solid var(--trait);background:var(--fond)}
+#voletImp.ferme{display:none}
+#impression{flex:1;min-height:0;overflow:auto;padding:9px 11px 12px}
+#verdict{border-radius:6px;padding:7px 10px;font-weight:600;font-size:14px;margin-bottom:8px}
+#verdict.ok{background:var(--okPale);color:var(--ok)} #verdict.alerte{background:var(--alertePale);color:var(--alerte)} #verdict.erreur{background:var(--erreurPale);color:var(--erreur)}
+#verdict small{display:block;font-weight:400;font-size:12.5px;color:#38424b;margin-top:2px}
+#mesures{display:grid;grid-template-columns:auto 1fr;gap:3px 10px;font-size:13.5px;margin:0 0 8px;background:var(--carte);border:1px solid var(--trait);padding:8px 10px}
+#mesures dt{color:var(--gris)} #mesures dd{margin:0;font-variant-numeric:tabular-nums;text-align:right}
+#mesures dd.mal{color:var(--erreur);font-weight:600} #mesures dd.moyen{color:var(--alerte);font-weight:600} #mesures dd.bien{color:var(--ok);font-weight:600}
+#remarques{font-size:13px;color:#38424b;margin:0 0 8px;padding:0}
+#remarques li{list-style:none;background:var(--alertePale);border-radius:5px;padding:5px 8px;margin-bottom:4px}
+#exporter{width:100%;background:var(--accent);border:0;color:#fff;font-weight:600;border-radius:6px;padding:9px;font-size:14.5px}
+#exporter:hover{background:var(--accentFonce)}
+#voletImp .petit{font-size:12.5px;color:var(--gris);margin-top:8px}
+
+/* ---------- barre d'état ---------- */
+footer{flex:none;display:flex;align-items:center;gap:14px;height:27px;padding:0 10px;background:var(--barre);border-top:1px solid var(--trait);font-size:12.5px;color:#38424b;white-space:nowrap;overflow:hidden}
+footer #etMessage{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+footer .puce{display:inline-flex;align-items:center;gap:5px}
+footer .puce i{width:9px;height:9px;border-radius:50%;background:var(--gris);display:inline-block}
+footer .puce.ok i{background:var(--ok)} footer .puce.alerte i{background:#d68a12} footer .puce.erreur i{background:var(--erreur)}
+footer button{background:none;border:0;padding:0;color:var(--marine);text-decoration:underline;font-size:12.5px}
+
+/* ---------- fenêtres ---------- */
+.voile{position:fixed;inset:0;background:rgba(29,36,43,.5);display:none;align-items:center;justify-content:center;z-index:20;padding:16px}
+.voile.ouvert{display:flex}
+.fenetre{background:var(--carte);border-radius:8px;max-width:1080px;width:100%;max-height:100%;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+.fenetre>header{display:flex;justify-content:space-between;align-items:center;gap:12px;background:var(--marine);color:#fff;padding:9px 14px;position:sticky;top:0}
+.fenetre>header h2{font-size:16.5px;font-weight:600}
+.fenetre>header button{background:none;border:1px solid rgba(255,255,255,.5);color:#fff;border-radius:5px;padding:3px 11px}
+.fenetre>header button:hover{background:rgba(255,255,255,.15)}
+.fenetre .corps{padding:16px 20px 20px}
+.fenetre .corps p{margin-bottom:10px;max-width:78ch}
+.fenetre .logiciels{background:var(--fond);border-radius:6px;padding:8px 11px}
+.tableau{overflow-x:auto;margin-top:10px}
+table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:820px}
+th,td{text-align:left;padding:7px 9px;border-bottom:1px solid var(--trait2);vertical-align:top}
+th{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--gris);font-weight:600;border-bottom-color:var(--trait)}
+td:first-child{font-weight:600;white-space:nowrap}
+.formulaire{display:grid;grid-template-columns:auto 1fr;gap:8px 12px;align-items:center;max-width:420px}
+.formulaire select,.formulaire input{border:1px solid var(--trait);border-radius:5px;padding:4px 7px;background:#fff}
+.formulaire .xyz{display:flex;gap:6px;align-items:center}
+.formulaire .xyz input{width:70px}
+kbd{font:inherit;font-size:12.5px;background:var(--fond);border:1px solid var(--trait);border-bottom-width:2px;border-radius:4px;padding:0 5px}
+
+/* écran d'ouverture */
+#fenAccueil .fenetre{max-width:920px;display:grid;grid-template-columns:minmax(0,5fr) minmax(0,6fr)}
+#fenAccueil .presentation{background:#f7f5ef;padding:26px 24px;border-right:1px solid var(--trait)}
+#fenAccueil .presentation svg{width:120px;height:120px;display:block;margin:0 auto 10px}
+#fenAccueil h1{font-size:27px;line-height:1.1;text-align:center;color:var(--marine);letter-spacing:.01em}
+#fenAccueil h1 span{color:var(--accent)}
+#fenAccueil .sous{text-align:center;font-size:12.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--gris);margin:4px 0 14px}
+#fenAccueil .presentation p{font-size:14px;margin-bottom:9px}
+#fenAccueil .actions{padding:22px 22px 18px;display:flex;flex-direction:column;gap:9px}
+#fenAccueil .actions h3{font-size:13px;letter-spacing:.05em;text-transform:uppercase;color:var(--gris);font-weight:600;margin-top:6px}
+#fenAccueil .actions button{text-align:left;background:var(--carte);border:1px solid var(--trait);border-left:4px solid var(--marine2);padding:9px 13px;border-radius:4px}
+#fenAccueil .actions button:hover{border-color:var(--accent);background:var(--accentPale)}
+#fenAccueil .actions button b{display:block;color:var(--marine);font-size:15.5px}
+#fenAccueil .actions button span{font-size:13px;color:var(--gris)}
+#fenAccueil .actions button.principal{border-left-color:var(--accent)}
+#fenAccueil .licence{font-size:12.5px;color:var(--gris);margin-top:auto;padding-top:8px}
+
+@media (max-width:1100px){ main{grid-template-columns:270px minmax(0,1fr) auto} #voletImp{width:260px} .onglets .titre span{display:none} }
+@media (max-width:820px){
+  body{overflow:auto;height:auto}
+  main{display:flex;flex-direction:column}
+  .scene{height:56vh;flex:none;order:-1}
+  .gauche{border-right:0}
+  #voletProp,#voletArbre{flex:none} #proprietes,#arbre,#impression{overflow:visible}
+  #voletImp{width:auto;border-left:0;border-top:1px solid var(--trait)}
+  .onglets{overflow-x:auto} .onglets .titre{display:none}
+  #fenAccueil .fenetre{grid-template-columns:1fr} #fenAccueil .presentation{border-right:0}
+  footer #etSouris{display:none}
+}
+</style>
+</head>
+<body>
+<div class="onglets" id="onglets">
+  <button id="btnFichier" aria-haspopup="true" aria-expanded="false">Fichier</button>
+  <div id="menuFichier" role="menu"></div>
+  <div class="titre"><b>Model Educ Studio</b><span id="nomProjet"></span></div>
+  <div class="rapide">
+    <button id="btnAnnuler" title="Annuler (Ctrl + Z)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg>Annuler</button>
+    <button id="btnRetablir" title="Rétablir (Ctrl + Y)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14l5-5-5-5"/><path d="M20 9H10a6 6 0 0 0 0 12h3"/></svg>Rétablir</button>
+  </div>
+</div>
+<div id="ruban" role="toolbar" aria-label="Ruban d’outils"></div>
+
+<main>
+  <div class="gauche">
+    <section class="volet" id="voletProp">
+      <h2>Propriétés <small id="propSous"></small></h2>
+      <div id="proprietes"></div>
+    </section>
+    <section class="volet" id="voletArbre">
+      <h2>Arborescence du projet <small id="arbreSous"></small></h2>
+      <div id="arbre"></div>
+    </section>
+  </div>
+  <section class="scene">
+    <canvas id="vue"></canvas>
+    <div id="consigne" role="status"></div>
+    <div id="bulle" role="status"></div>
+    <div id="cube" aria-label="Cube de vues"><div class="corps" id="cubeCorps"></div></div>
+    <button id="cubeIso" title="Revenir à la vue en perspective">3D</button>
+  </section>
+  <section class="volet" id="voletImp">
+    <h2>Impression 3D</h2>
+    <div id="impression">
+      <div id="verdict"></div>
+      <dl id="mesures"></dl>
+      <ul id="remarques"></ul>
+      <button id="exporter">Exporter en STL</button>
+      <p class="petit">Le contrôle porte sur tous les éléments visibles, perçages appliqués. La masse est un ordre de grandeur.</p>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <span id="etMessage"></span>
+  <span id="etSouris"></span>
+  <span id="etCompte"></span>
+  <span class="puce" id="etVerdict"><i></i><span></span></span>
+  <span>Unités : mm</span>
+  <button id="etLicence">CC BY-NC-SA 4.0</button>
+</footer>
+
+<div class="voile" id="fenTexte"><div class="fenetre" style="max-width:760px"><header><h2 id="fenTexteTitre"></h2><button data-fermer>Fermer</button></header><div class="corps" id="fenTexteCorps"></div></div></div>
+
+<div class="voile" id="fenComparer"><div class="fenetre"><header><h2>Sept méthodes, sept façons de penser une pièce</h2><button data-fermer>Fermer</button></header><div class="corps">
+  <p>Aucune méthode n’est « la meilleure » : on choisit selon la pièce. Ici, toutes peuvent se retrouver sur le même plateau. Au bout du compte, l’imprimante reçoit toujours la même chose : un maillage de triangles (fichier STL), que le trancheur découpe en couches.</p>
+  <div class="tableau"><table id="tableComparer"></table></div>
+</div></div></div>
+
+<div class="voile" id="fenImprimante"><div class="fenetre" style="max-width:520px"><header><h2>Mon imprimante</h2><button data-fermer>Fermer</button></header><div class="corps">
+  <p>Le plateau dessiné dans la vue et le contrôle « dépasse du plateau » suivent ces dimensions.</p>
+  <div class="formulaire">
+    <label for="choixPlateau">Plateau</label>
+    <select id="choixPlateau"><option value="220,220,250">220 × 220 × 250 mm</option><option value="256,256,256">256 × 256 × 256 mm</option><option value="180,180,180">180 × 180 × 180 mm</option><option value="perso">Autre…</option></select>
+    <span>Dimensions</span>
+    <div class="xyz">X <input type="number" id="plX" min="50" max="500"> Y <input type="number" id="plY" min="50" max="500"> Z <input type="number" id="plZ" min="50" max="500"></div>
+  </div>
+</div></div></div>
+
+<div class="voile" id="fenAccueil"><div class="fenetre">
+  <div class="presentation">
+    <svg viewBox="0 0 120 120" fill="none" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true"><path d="M60 14l38 21v44L60 100 22 79V35z" fill="#e7eef8" stroke="#233a5e" stroke-width="3"/><path d="M22 35l38 21 38-21M60 56v44" stroke="#233a5e" stroke-width="3"/><path d="M41 45.5l38 21M79 24.5L41 45.5M41 67v22M79 67v22" stroke="#31507f" stroke-width="1.6" opacity=".6"/><circle cx="60" cy="56" r="6" fill="#fb923c" stroke="#9a3412" stroke-width="2"/><path d="M12 106h96" stroke="#c2410c" stroke-width="3"/><path d="M20 112h80" stroke="#c2410c" stroke-width="2" opacity=".5"/></svg>
+    <h1>Model Educ <span>Studio</span></h1>
+    <div class="sous">Atelier de modélisation 3D</div>
+    <p>Pose des éléments sur le plateau, règle-les dans la fenêtre <b>Propriétés</b>, perce, fusionne, puis vérifie que ta pièce peut sortir d’une imprimante 3D.</p>
+    <p>Chaque outil du ruban correspond à une <b>méthode de modélisation</b> : solides, courbes NURBS, maillage, subdivision, surfaces implicites, voxels, paramétrique.</p>
+    <p><b>Outil pédagogique, pas un logiciel professionnel.</b> Il ne remplace ni un logiciel de CAO, ni un trancheur.</p>
+  </div>
+  <div class="actions">
+    <h3>Commencer</h3>
+    <button class="principal" id="accNouveau"><b>Nouveau projet</b><span>un plateau vide, prêt à recevoir tes éléments</span></button>
+    <button id="accReprendre"><b>Reprendre mon travail</b><span id="accReprendreTexte">le projet gardé dans ce navigateur</span></button>
+    <h3>Ouvrir un exemple</h3>
+    <div id="accExemples" style="display:flex;flex-direction:column;gap:9px"></div>
+    <p class="licence">Sur une idée de Jean-Philippe Amat, lycée Urbain Vitry (Toulouse) · Créateur : Claude · Licence CC BY-NC-SA 4.0</p>
+  </div>
+</div></div>
+
+<input type="file" id="fichierOuvrir" accept=".json,application/json" hidden>
+
+<script src="js/moteur.js"></script>
+<script src="js/maillage.js"></script>
+<script src="js/csg.js"></script>
+<script src="js/cage.js"></script>
+<script src="js/a1-nurbs.js"></script>
+<script src="js/a2-cage.js"></script>
+<script src="js/a3-implicite.js"></script>
+<script src="js/a4-voxels.js"></script>
+<script src="js/a5-solides.js"></script>
+<script src="js/a7-parametrique.js"></script>
+<script src="js/types.js"></script>
+<script src="js/studio.js"></script>
+</body>
+</html>
