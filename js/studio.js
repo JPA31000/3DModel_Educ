@@ -55,6 +55,11 @@
     droite: '<path d="M27 11l-11 6v10l11-6z" fill="currentColor" fill-opacity=".18"/><path d="M27 11L16 5 5 11l11 6M5 11v10l11 6"/>',
     arriere: '<path d="M16 5l11 6v10l-11-6z" stroke-dasharray="2.5 2.5"/><path d="M16 5L5 11v10l11 6 11-6M5 11l11 6 11-6M16 17v10"/>',
     gauche: '<path d="M16 5L5 11v10l11-6z" stroke-dasharray="2.5 2.5"/><path d="M16 5l11 6v10l-11 6-11-6M5 11l11 6 11-6M16 17v10"/>',
+    section: '<path d="M16 5l11 6v10l-11 6z"/><path d="M16 5L5 11v10l11 6" stroke-dasharray="2.5 2.5"/><path d="M16 12l11 6M16 18l11 6M16 24l5 3" stroke-width="1.1"/>',
+    vues1: '<rect x="4" y="6" width="24" height="20" rx="1.5"/>',
+    vues2: '<rect x="4" y="6" width="24" height="20" rx="1.5"/><path d="M16 6v20"/>',
+    vues3: '<rect x="4" y="6" width="24" height="20" rx="1.5"/><path d="M16 6v20M16 16h12"/>',
+    vues4: '<rect x="4" y="6" width="24" height="20" rx="1.5"/><path d="M16 6v20M4 16h24"/>',
     cadrer: '<path d="M5 11V5h6M21 5h6v6M27 21v6h-6M11 27H5v-6"/><rect x="11" y="11" width="10" height="10" rx="1"/>',
     cadrerSel: '<path d="M5 11V5h6M21 5h6v6M27 21v6h-6M11 27H5v-6"/><circle cx="16" cy="16" r="4.5"/>',
     ombre: '<circle cx="16" cy="16" r="10" fill="currentColor" fill-opacity=".25"/>',
@@ -79,6 +84,119 @@
   const insts = new Map(), caches = new Map(), aretesDe = new WeakMap(), ouverts = {};
   let parts = [], piece = { v: [], f: [] }, analyse = null, notes = [], groupesAretes = [];
   let tranche = null, fantome = null, glisse = null, rafr = [];
+
+  /* ---------- fenêtres de vue : une à quatre, chacune avec sa vue (3D, plan, face, côté, section) ---------- */
+  const TYPES_VUE = [['3d', '3D'], ['dessus', 'Plan (dessus)'], ['face', 'Face'], ['arriere', 'Arrière'], ['droite', 'Côté droit'], ['gauche', 'Côté gauche'], ['section', 'Section']];
+  const AXES = { // regard (av), droite de l'écran (dr), haut de l'écran (ha)
+    face: { av: [0, 1, 0], dr: [1, 0, 0], ha: [0, 0, 1] }, arriere: { av: [0, -1, 0], dr: [-1, 0, 0], ha: [0, 0, 1] },
+    droite: { av: [-1, 0, 0], dr: [0, 1, 0], ha: [0, 0, 1] }, gauche: { av: [1, 0, 0], dr: [0, -1, 0], ha: [0, 0, 1] },
+    dessus: { av: [0, 0, -1], dr: [1, 0, 0], ha: [0, 1, 0] }
+  };
+  const F = [0, 1, 2, 3].map(() => vue.nouvelleFenetre());
+  const borne = x => Math.min(0.8, Math.max(0.2, +x || 0.5));
+  const vues = { n: 1, types: ['3d', 'dessus', 'face', 'droite'], fx: 0.5, fy: 0.5, axe: 'y', pos: 0 };
+  (function relire() { // réglages gardés dans le navigateur : on ne reprend que ce qui est valable
+    const g = lire('vues'); if (!g || typeof g !== 'object') return;
+    if ([1, 2, 3, 4].includes(g.n)) vues.n = g.n;
+    if (Array.isArray(g.types) && g.types.length === 4 && g.types.every(t => TYPES_VUE.some(x => x[0] === t))) vues.types = g.types.slice();
+    vues.fx = borne(g.fx); vues.fy = borne(g.fy);
+    if (g.axe === 'x') vues.axe = 'x';
+    if (typeof g.pos === 'number' && isFinite(g.pos)) vues.pos = Math.max(-250, Math.min(250, Math.round(g.pos)));
+  })();
+  const sauverVues = () => ecrire('vues', vues);
+  const sectionVisible = () => vues.types.slice(0, vues.n).includes('section');
+  function places() {
+    const x = vues.fx, y = vues.fy;
+    return vues.n === 1 ? [[0, 0, 1, 1]] : vues.n === 2 ? [[0, 0, x, 1], [x, 0, 1 - x, 1]]
+      : vues.n === 3 ? [[0, 0, x, 1], [x, 0, 1 - x, y], [x, y, 1 - x, 1 - y]] : [[0, 0, x, y], [x, 0, 1 - x, y], [0, y, x, 1 - y], [x, y, 1 - x, 1 - y]];
+  }
+  function reglerVue(i) {
+    const f = F[i], t = vues.types[i];
+    if (t === '3d') { f.ortho = null; f.plan = null; }
+    else if (t === 'section') { // on regarde de face (coupe en travers de Y) ou de côté (en travers de X) ; ce qui est devant le plan est retiré
+      if (vues.axe === 'x') { f.ortho = AXES.droite; f.plan = [-1, 0, 0, -vues.pos]; } else { f.ortho = AXES.face; f.plan = [0, 1, 0, vues.pos]; }
+    } else { f.ortho = AXES[t]; f.plan = null; }
+  }
+  /* la fenêtre 3D qui porte le cube de vues : l'active si elle est en 3D, sinon la première en 3D */
+  function i3d() { const t = vues.types.slice(0, vues.n); return t[vue.active] === '3d' ? vue.active : t.indexOf('3d'); }
+  const cam3d = () => F[Math.max(0, i3d())].cam;
+  function placerVues() {
+    const pl = places(), z = $('cadres'), pc = x => (x * 100).toFixed(3) + '%';
+    pl.forEach((r, i) => { F[i].r = r; });
+    [...z.querySelectorAll('.cadre')].forEach((c, i) => {
+      const r = pl[i]; c.style.left = pc(r[0]); c.style.top = pc(r[1]); c.style.width = pc(r[2]); c.style.height = pc(r[3]);
+      c.classList.toggle('actif', vues.n > 1 && i === vue.active);
+    });
+    for (const s of z.querySelectorAll('.sep')) {
+      const k = s.dataset.sep;
+      if (k === 'v') { s.style.left = pc(vues.fx); s.style.top = '0'; s.style.height = '100%'; }
+      else if (k === 'h') { s.style.top = pc(vues.fy); s.style.left = vues.n === 3 ? pc(vues.fx) : '0'; s.style.width = vues.n === 3 ? pc(1 - vues.fx) : '100%'; }
+      else { s.style.left = pc(vues.fx); s.style.top = pc(vues.fy); }
+    }
+    const k = i3d(), cu = $('cube'), bi = $('cubeIso');
+    const large = k >= 0 && pl[k][2] * z.clientWidth >= 230 && pl[k][3] * z.clientHeight >= 170; // dans une petite fenêtre, le cube cacherait le menu de vue
+    cu.style.display = bi.style.display = large ? '' : 'none';
+    if (k >= 0) { const r = pl[k], d = pc(1 - r[0] - r[2]); cu.style.right = 'calc(' + d + ' + 16px)'; cu.style.top = 'calc(' + pc(r[1]) + ' + 14px)'; bi.style.right = 'calc(' + d + ' + 10px)'; bi.style.top = 'calc(' + pc(r[1]) + ' + 100px)'; }
+    vue.demander();
+  }
+  function construireVues() {
+    const z = $('cadres'); z.innerHTML = '';
+    vue.fenetres = F.slice(0, vues.n); if (vue.active >= vues.n) vue.active = 0;
+    for (let i = 0; i < vues.n; i++) {
+      reglerVue(i);
+      const c = el('div', 'cadre' + (vues.n === 1 ? ' seul' : '')), e = el('div', 'entete'), s = el('select');
+      s.innerHTML = TYPES_VUE.map(([k, lib]) => '<option value="' + k + '">' + lib + '</option>').join(''); s.value = vues.types[i];
+      s.title = 'Choisir la vue affichée dans cette fenêtre'; s.setAttribute('aria-label', 'Vue de la fenêtre ' + (i + 1));
+      s.addEventListener('change', () => choisirVue(i, s.value));
+      e.appendChild(s);
+      if (vues.types[i] === 'section') {
+        const d = el('div', 'coupe'), a = el('select'), g = el('input'), out = el('output'), k = vues.axe === 'x' ? 0 : 1, m = Math.round(reglages.plateau[k] / 2);
+        a.innerHTML = '<option value="y">vue de face</option><option value="x">vue de côté</option>'; a.value = vues.axe; a.title = 'Sens du regard sur la coupe'; a.setAttribute('aria-label', 'Sens du regard sur la coupe');
+        g.type = 'range'; g.min = -m; g.max = m; g.step = 1; vues.pos = Math.max(-m, Math.min(m, vues.pos)); g.value = vues.pos; g.title = 'Déplacer le plan de coupe'; g.setAttribute('aria-label', 'Position du plan de coupe');
+        const montrer = () => { out.textContent = (k ? 'Y' : 'X') + ' = ' + nb(vues.pos, 0) + ' mm'; }; montrer();
+        a.addEventListener('change', () => { vues.axe = a.value; vues.pos = 0; sauverVues(); construireVues(); app.majDecor(); });
+        g.addEventListener('input', () => { vues.pos = +g.value; for (let j = 0; j < vues.n; j++) reglerVue(j); z.querySelectorAll('.coupe').forEach(x => { x.querySelector('input').value = vues.pos; x.querySelector('output').textContent = (k ? 'Y' : 'X') + ' = ' + nb(vues.pos, 0) + ' mm'; }); app.majDecor(); });
+        g.addEventListener('change', sauverVues);
+        d.append(a, g, out); e.appendChild(d);
+      }
+      c.appendChild(e); z.appendChild(c);
+    }
+    /* séparateurs : on les glisse pour redimensionner les fenêtres */
+    const scene = z.parentNode;
+    for (const k of vues.n === 1 ? [] : vues.n === 2 ? ['v'] : vues.n === 3 ? ['v', 'h'] : ['v', 'h', 'c']) {
+      const s = el('div', 'sep ' + k); s.dataset.sep = k; s.title = 'Glisser pour redimensionner les fenêtres';
+      s.addEventListener('pointerdown', ev => { ev.preventDefault(); s.setPointerCapture(ev.pointerId); s.classList.add('glisse'); });
+      s.addEventListener('pointermove', ev => {
+        if (!s.classList.contains('glisse')) return;
+        const r = scene.getBoundingClientRect();
+        if (k !== 'h') vues.fx = borne((ev.clientX - r.left) / r.width);
+        if (k !== 'v') vues.fy = borne((ev.clientY - r.top) / r.height);
+        placerVues();
+      });
+      const lacher = () => { if (s.classList.contains('glisse')) { s.classList.remove('glisse'); sauverVues(); } };
+      s.addEventListener('pointerup', lacher); s.addEventListener('pointercancel', lacher);
+      z.appendChild(s);
+    }
+    placerVues();
+  }
+  function choisirVue(i, t) { vues.types[i] = t; sauverVues(); construireVues(); app.majDecor(); ruban(); }
+  function nbVues(n) { vues.n = n; sauverVues(); construireVues(); app.majDecor(); ruban(); }
+  vue.surActive = () => { placerVues(); if (onglet === 'vue') ruban(); };
+  window.addEventListener('resize', () => placerVues());
+  vue.fenetres = F.slice(0, vues.n); for (let i = 0; i < 4; i++) reglerVue(i);
+  /* contour de la pièce coupée par un plan perpendiculaire à l'axe k (0 = X, 1 = Y) */
+  function couper(m, k, s) {
+    const v = m.v, f = m.f, seg = [];
+    for (let t = 0; t < f.length; t += 3) {
+      const pts = [];
+      for (let j = 0; j < 3; j++) {
+        const a = f[t + j] * 3, b = f[t + (j + 1) % 3] * 3, da = v[a + k] - s, db = v[b + k] - s;
+        if ((da < 0) !== (db < 0)) { const u = da / (da - db); pts.push(v[a] + (v[b] - v[a]) * u, v[a + 1] + (v[b + 1] - v[a + 1]) * u, v[a + 2] + (v[b + 2] - v[a + 2]) * u); }
+      }
+      if (pts.length === 6) seg.push(pts[0], pts[1], pts[2], pts[3], pts[4], pts[5]);
+    }
+    return seg;
+  }
 
   const obj = id => P.objets.find(o => o.id === id);
   const selO = () => (sel !== null && obj(sel)) || null;
@@ -240,6 +358,13 @@
       vue.coupe = z; fant.push({ seg: M.trancher(piece, z), c: [0.76, 0.15, 0.05, 1] });
       fins = fins.map(g => { const s = []; for (let i = 0; i < g.seg.length; i += 6) if (Math.max(g.seg[i + 2], g.seg[i + 5]) <= z + 1e-3) s.push(g.seg[i], g.seg[i + 1], g.seg[i + 2], g.seg[i + 3], g.seg[i + 4], g.seg[i + 5]); return { seg: s, c: g.c }; });
     } else vue.coupe = null;
+    if (sectionVisible()) { // trait de coupe sur le plateau (avec le sens du regard) et contour de la matière coupée
+      const k = vues.axe === 'x' ? 0 : 1, L = reglages.plateau[1 - k] / 2, s = vues.pos, d = k ? 1 : -1, pt = (a, b) => k ? [a, b, 0] : [b, a, 0], tr = [];
+      tr.push(...pt(-L, s), ...pt(L, s));
+      for (const a of [-L, L]) tr.push(...pt(a, s), ...pt(a, s + 14 * d), ...pt(a, s + 14 * d), ...pt(a - 3.5, s + 8 * d), ...pt(a, s + 14 * d), ...pt(a + 3.5, s + 8 * d));
+      fant.push({ seg: tr, c: [0.14, 0.23, 0.37, 0.95] });
+      if (analyse && !analyse.vide) fant.push({ seg: couper(piece, k, s + 1e-3), c: [0.14, 0.23, 0.37, 1] });
+    }
     const assembler = groupes => {
       let n = 0; for (const g of groupes) n += g.seg.length / 3;
       const A = new Float32Array(n * 3), B = new Float32Array(n * 4); let k = 0;
@@ -249,10 +374,10 @@
     vue.traits(...assembler(fant)); vue.traitsFins(...assembler(fins)); vue.definirPoignees(poig);
   };
   app.cadrer = function (selection) {
-    const o = selection && selO();
-    if (o && cache(o).bb) vue.cadrer(cache(o).bb[0], cache(o).bb[1]);
-    else if (analyse && !analyse.vide) vue.cadrer(analyse.min, analyse.max);
-    else vue.cadrer([-60, -60, 0], [60, 60, 60]);
+    const o = selection && selO(), cad = (a, b) => { for (const f of F) vue.cadrer(a, b, f); }; // les quatre fenêtres, même celles qui ne sont pas affichées
+    if (o && cache(o).bb) cad(cache(o).bb[0], cache(o).bb[1]);
+    else if (analyse && !analyse.vide) cad(analyse.min, analyse.max);
+    else cad([-60, -60, 0], [60, 60, 60]);
   };
 
   /* ---------- valider un geste : annulation, sauvegarde, contrôle complet ---------- */
@@ -426,7 +551,7 @@
   const ONGLETS = [['creer', 'Créer'], ['modifier', 'Modifier'], ['vue', 'Vue'], ['imprimer', 'Imprimer'], ['comprendre', 'Comprendre']];
   const VUES = { iso: [-0.9, 0.5], face: [-Math.PI / 2, 0.0001], arriere: [Math.PI / 2, 0.0001], droite: [0, 0.0001], gauche: [Math.PI, 0.0001], dessus: [-Math.PI / 2, Math.PI / 2 - 0.001] };
   function allerVue(nom) {
-    const [az, e1] = VUES[nom], c = vue.cam, a0 = c.az, e0 = c.el, t0 = performance.now();
+    const [az, e1] = VUES[nom], c = cam3d(), a0 = c.az, e0 = c.el, t0 = performance.now();
     let d = az - a0; d = ((d + Math.PI) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI) - Math.PI;
     const pas = t => { const k = Math.min(1, (t - t0) / 320), s = k * k * (3 - 2 * k); c.az = a0 + d * s; c.el = e0 + (e1 - e0) * s; vue.demander(); if (k < 1) requestAnimationFrame(pas); };
     if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) { c.az = az; c.el = e1; vue.demander(); } else requestAnimationFrame(pas);
@@ -464,8 +589,12 @@
       B(z, 'afficher', 'Tout afficher', () => commande('afficherTout'), { inactif: !P.objets.some(x => x.vis === false) });
       B(G('Assembler'), 'fusionner', 'Fusionner', () => commande('fusionner'), { inactif: !P.objets.length, titre: 'Unir les éléments pleins visibles, enlever les perçages, et ne garder qu’un seul maillage' });
     } else if (onglet === 'vue') {
-      let z = G('Vues');
-      for (const [k, lib] of [['iso', '3D'], ['dessus', 'Dessus'], ['face', 'Face'], ['arriere', 'Arrière'], ['droite', 'Droite'], ['gauche', 'Gauche']]) B(z, k, lib, () => allerVue(k));
+      let z = G('Fenêtres');
+      for (const n of [1, 2, 3, 4]) B(z, 'vues' + n, n + (n > 1 ? ' vues' : ' vue'), () => nbVues(n), { actif: vues.n === n, titre: 'Afficher ' + n + (n > 1 ? ' fenêtres de vue côte à côte : glisse les séparateurs pour les redimensionner' : ' seule fenêtre de vue') });
+      z = G(vues.n > 1 ? 'Vue de la fenêtre active' : 'Vue affichée');
+      const ta = vues.types[vue.active];
+      for (const [k, ic, lib] of [['3d', 'iso', '3D'], ['dessus', 'dessus', 'Plan'], ['face', 'face', 'Face'], ['arriere', 'arriere', 'Arrière'], ['droite', 'droite', 'Côté droit'], ['gauche', 'gauche', 'Côté gauche'], ['section', 'section', 'Section']])
+        B(z, ic, lib, () => { if (k === '3d' && ta === '3d') allerVue('iso'); else choisirVue(vue.active, k); }, { actif: ta === k, titre: k === 'section' ? 'Coupe verticale de la pièce : le curseur de la fenêtre déplace le plan de coupe' : k === '3d' ? 'Vue 3D en perspective (un second clic la remet de trois quarts)' : 'Vue ' + lib.toLowerCase() + ', sans perspective' });
       z = G('Cadrage');
       B(z, 'cadrer', 'Tout', () => app.cadrer(), { titre: 'Cadrer toute la pièce (touche F)' });
       B(z, 'cadrerSel', 'Sélection', () => app.cadrer(true), { inactif: !o });
@@ -555,6 +684,11 @@
 
   /* ---------- la vue : clics, survol, poignées ---------- */
   function viser(r) {
+    const pl = r.fenetre && r.fenetre.plan;
+    if (pl) { // dans une section, la matière retirée ne se clique pas : le rayon part du plan de coupe
+      const n = [pl[0], pl[1], pl[2]], den = V.dot(r.d, n), t = Math.abs(den) > 1e-9 ? (pl[3] - V.dot(r.o, n)) / den : 0;
+      if (t > 0) r = { o: V.add(r.o, V.mul(r.d, t)), d: r.d };
+    }
     let mieux = null;
     for (const o of P.objets) { if (o.vis === false || !cache(o).monde) continue; const h = M.rayon(cache(o).monde, r.o, r.d); if (h && (!mieux || h.t < mieux.t)) { mieux = h; mieux.o = o; } }
     return mieux;
@@ -562,8 +696,12 @@
   function pointDePose(r) {
     const h = viser(r);
     if (h && h.n[2] > 0.5) return [Math.round(h.p[0]), Math.round(h.p[1]), Math.round(h.p[2] * 10) / 10];
-    const p = M.rayonPlan(r, [0, 0, 0], [0, 0, 1]); if (!p || r.d[2] >= 0) return null;
-    return [Math.round(p[0]), Math.round(p[1]), 0];
+    const p = M.rayonPlan(r, [0, 0, 0], [0, 0, 1]);
+    if (p && r.d[2] < 0) return [Math.round(p[0]), Math.round(p[1]), 0];
+    if (r.ortho && Math.abs(r.d[2]) < 1e-6) { // vue de face ou de côté : on pose sur le plateau, dans le plan vertical qui passe par son centre
+      const q = M.rayonPlan(r, [0, 0, 0], r.d); return q ? [Math.round(q[0]), Math.round(q[1]), 0] : null;
+    }
+    return null;
   }
   vue.surClic = (r, ev) => {
     if (outil) {
@@ -579,8 +717,13 @@
     if (!h && sel !== null) selectionner(null);
   };
   vue.surSurvol = (r, ev) => {
-    const p = M.rayonPlan(r, [0, 0, 0], [0, 0, 1]);
-    $('etSouris').textContent = p && r.d[2] < 0 ? 'X ' + nb(p[0], 0) + ' · Y ' + nb(p[1], 0) + ' mm' : '';
+    if (r.ortho && Math.abs(r.d[2]) < 0.5) { // vue de face, de côté ou section : on lit une cote horizontale et la hauteur
+      const q = M.rayonPlan(r, [0, 0, 0], r.d);
+      $('etSouris').textContent = q ? (Math.abs(r.d[0]) > 0.5 ? 'Y ' + nb(q[1], 0) : 'X ' + nb(q[0], 0)) + ' · Z ' + nb(q[2], 0) + ' mm' : '';
+    } else {
+      const p = M.rayonPlan(r, [0, 0, 0], [0, 0, 1]);
+      $('etSouris').textContent = p && r.d[2] < 0 ? 'X ' + nb(p[0], 0) + ' · Y ' + nb(p[1], 0) + ' mm' : '';
+    }
     if (outil) { const q = pointDePose(r); if ((q && q.join()) !== (fantome && fantome.join())) { fantome = q; app.majDecor(); } return; }
     const o = selO(); if (o) { const i = inst(o); if (i.survol) i.survol(rayonLocal(o, r), ev); }
   };
@@ -591,8 +734,8 @@
   };
   vue.surPoigneeGlisse = (id, r, p0) => {
     const o = selO(); if (!o) return;
-    if (id === '__xy') { const p = M.rayonPlan(r, p0, [0, 0, 1]); if (!p) return; o.pos[0] = Math.round(glisse.pos[0] + p[0] - p0[0]); o.pos[1] = Math.round(glisse.pos[1] + p[1] - p0[1]); app.maj(true); }
-    else if (id === '__z') { const n = V.norm([r.avant[0], r.avant[1], 0]), p = M.rayonPlan(r, p0, n); if (!p) return; o.pos[2] = Math.max(glisse.pos[2] - glisse.bas, Math.round(glisse.pos[2] + p[2] - p0[2])); app.maj(true); }
+    if (id === '__xy') { const p = M.rayonPlan(r, p0, Math.abs(r.d[2]) < 0.02 ? r.avant : [0, 0, 1]); if (!p) return; /* de face ou de côté : on glisse dans le plan de l’écran */ o.pos[0] = Math.round(glisse.pos[0] + p[0] - p0[0]); o.pos[1] = Math.round(glisse.pos[1] + p[1] - p0[1]); app.maj(true); }
+    else if (id === '__z') { if (Math.hypot(r.avant[0], r.avant[1]) < 1e-6) return; /* en plan, on ne voit pas la hauteur */ const n = V.norm([r.avant[0], r.avant[1], 0]), p = M.rayonPlan(r, p0, n); if (!p) return; o.pos[2] = Math.max(glisse.pos[2] - glisse.bas, Math.round(glisse.pos[2] + p[2] - p0[2])); app.maj(true); }
     else if (id === '__r') { const p = M.rayonPlan(r, p0, [0, 0, 1]); if (!p) return; o.rot[2] = ((Math.round(Math.atan2(p[1] - o.pos[1], p[0] - o.pos[0]) * 180 / Math.PI / 5) * 5) % 360 + 360) % 360; app.maj(true); }
     else { const i = inst(o); if (i.poigneeGlisse) i.poigneeGlisse(id, rayonLocal(o, r), versLocal(o, p0)); }
   };
@@ -611,7 +754,7 @@
   }
   let azVu = null, elVu = null;
   (function suivre() {
-    const c = vue.cam;
+    const c = cam3d();
     if (c.az !== azVu || c.el !== elVu) { azVu = c.az; elVu = c.el; cube.style.transform = 'rotateX(' + (-c.el) + 'rad) rotateY(' + (-(c.az + Math.PI / 2)) + 'rad)'; }
     requestAnimationFrame(suivre);
   })();
@@ -678,8 +821,10 @@
 <p><b>2. Régler.</b> L’élément sélectionné montre ses réglages dans la fenêtre <b>Propriétés</b>, à gauche : nom, rôle, position, puis sa forme. Les points de contrôle, les faces ou les cubes se manipulent directement dans la vue.</p>
 <p><b>3. Placer.</b> Dans la vue, la poignée <b>bleue</b> déplace l’élément sur le plateau, la <b>verte</b> le monte, la <b>violette</b> le fait tourner.</p>
 <p><b>4. Percer et assembler.</b> Onglet <b>Modifier</b> : un élément passé en <b>Perçage</b> enlève de la matière aux éléments pleins qu’il traverse. <b>Fusionner</b> remplace tous les éléments par un seul maillage.</p>
-<p><b>5. Regarder.</b> Glisser : tourner la vue. Clic droit ou <kbd>Maj</kbd> + glisser : déplacer la vue. Molette : zoom. Le <b>cube</b> en haut à droite donne les vues de face, de dessus, de côté.</p>
-<p><b>6. Imprimer.</b> Le volet <b>Impression 3D</b> dit si la pièce est imprimable. L’onglet <b>Imprimer</b> montre les couches et exporte le fichier STL.</p>
+<p><b>5. Regarder.</b> Glisser : tourner la vue 3D. Clic droit ou <kbd>Maj</kbd> + glisser : déplacer la vue. Molette : zoom. Le <b>cube</b> en haut à droite de la vue 3D la tourne vers la face, le dessus, le côté.</p>
+<p><b>6. Plusieurs vues.</b> Onglet <b>Vue</b> : affiche 1, 2, 3 ou 4 fenêtres. Le <b>menu déroulant en haut à gauche</b> de chaque fenêtre choisit ce qu’elle montre : 3D, plan (dessus), face, arrière, côté droit, côté gauche ou <b>section</b>. Glisse les <b>séparateurs</b> entre les fenêtres pour les redimensionner. Les vues en plan, de face, de côté et la section sont sans perspective : on y glisse pour déplacer la vue, et on peut y sélectionner et déplacer les éléments comme en 3D.</p>
+<p><b>La section</b> coupe la pièce par un plan vertical : le curseur de la fenêtre déplace ce plan, la matière coupée est hachurée, et un trait de coupe fléché apparaît sur le plateau dans les autres vues.</p>
+<p><b>7. Imprimer.</b> Le volet <b>Impression 3D</b> dit si la pièce est imprimable. L’onglet <b>Imprimer</b> montre les couches et exporte le fichier STL.</p>
 <p><b>Raccourcis.</b> <kbd>Ctrl</kbd> + <kbd>Z</kbd> annuler · <kbd>Ctrl</kbd> + <kbd>Y</kbd> rétablir · <kbd>Ctrl</kbd> + <kbd>D</kbd> dupliquer · <kbd>Suppr</kbd> supprimer · <kbd>F</kbd> cadrer · <kbd>Échap</kbd> lâcher l’outil ou la sélection.</p>`;
   const APROPOS = `
 <p><b>Model Educ Studio est un outil pédagogique, pas un logiciel professionnel.</b> Il fait manipuler, dans une interface à ruban, sept méthodes de modélisation 3D et les règles de base de l’impression 3D. Il ne remplace ni un logiciel de CAO (Fusion 360, FreeCAD, Blender, Revit…), ni un trancheur (Cura, PrusaSlicer, Bambu Studio).</p>
@@ -755,12 +900,12 @@
   for (const ex of EXEMPLES) { const b = el('button', '', '<b>' + ex.nom + '</b><span>' + ex.texte + '</span>'); b.type = 'button'; b.addEventListener('click', () => { if (confirmer()) nouveau(ex.nom, ex.faire); }); $('accExemples').appendChild(b); }
 
   /* ---------- démarrage ---------- */
-  majPlateau(); majVolet();
+  majPlateau(); majVolet(); construireVues();
   const garde = verifier(lire('projet'));
   if (garde) delete garde.rejets;
   installer(garde || { nom: 'Sans titre', n: 0, objets: [] }, true);
   ouvrirAccueil();
 
   /* pour les essais */
-  app.essai = { etat: () => ({ P, sel, outil, onglet, analyse, notes, piece, annul: annul.length, retab: retab.length }), creer, selectionner, commande, installer, nouveau, verifier, EXEMPLES, prendreOutil, allerVue, cache, obj, setOnglet: k => { onglet = k; ruban(); } };
+  app.essai = { etat: () => ({ P, sel, outil, onglet, analyse, notes, piece, annul: annul.length, retab: retab.length }), creer, selectionner, commande, installer, nouveau, verifier, EXEMPLES, prendreOutil, allerVue, cache, obj, vues, F, choisirVue, nbVues, setOnglet: k => { onglet = k; ruban(); } };
 })(globalThis.ME = globalThis.ME || {});

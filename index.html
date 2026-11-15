@@ -125,7 +125,24 @@ details.bloc.forme{border-left-color:var(--bleu)}
 #bulle{position:absolute;left:50%;top:14px;transform:translateX(-50%);background:var(--encre);color:#fff;padding:8px 15px;border-radius:7px;font-size:14px;max-width:76%;opacity:0;transition:opacity .25s;pointer-events:none;z-index:3;text-align:center}
 #bulle.montre{opacity:1}
 #bulle.alerte{background:var(--alerte)}
-#consigne{position:absolute;left:10px;top:10px;background:var(--accent);color:#fff;font-size:13.5px;padding:5px 11px;border-radius:5px;display:none;max-width:60%}
+/* fenêtres de vue : cadres, menu de vue, séparateurs */
+#cadres{position:absolute;inset:0;pointer-events:none;z-index:1}
+.cadre{position:absolute;border:1px solid #aab2ba;pointer-events:none;overflow:hidden}
+.cadre.seul{border:0}
+.cadre.actif{border:2px solid var(--accent)}
+.cadre .entete{position:absolute;left:6px;top:6px;display:flex;gap:5px;align-items:center;flex-wrap:wrap;pointer-events:auto;max-width:calc(100% - 12px)}
+.cadre select{border:1px solid var(--trait);border-radius:5px;background:rgba(255,255,255,.95);padding:2px 4px;font-size:13px;font-weight:600;color:var(--marine);max-width:100%}
+.cadre .coupe{display:flex;align-items:center;gap:5px;background:rgba(255,255,255,.95);border:1px solid var(--trait);border-radius:5px;padding:1px 6px;font-size:12.5px;white-space:nowrap;max-width:100%;min-width:0}
+.cadre .coupe select{border:0;font-weight:400;padding:0;background:none}
+.cadre .coupe input{flex:1 1 104px;width:104px;min-width:36px;accent-color:var(--marine);margin:0}
+.cadre .coupe output{font-variant-numeric:tabular-nums}
+.sep{position:absolute;pointer-events:auto;z-index:2;touch-action:none}
+.sep.v{width:11px;margin-left:-5.5px;cursor:col-resize}
+.sep.h{height:11px;margin-top:-5.5px;cursor:row-resize}
+.sep.c{width:16px;height:16px;margin:-8px 0 0 -8px;cursor:move;border-radius:50%;background:#fff;border:1px solid var(--gris);z-index:3}
+.sep.v:hover,.sep.h:hover,.sep.v.glisse,.sep.h.glisse{background:rgba(194,65,12,.35)}
+.sep.c:hover,.sep.c.glisse{background:#ffe2c7;border-color:var(--accent)}
+#consigne{position:absolute;left:10px;bottom:10px;z-index:2;background:var(--accent);color:#fff;font-size:13.5px;padding:5px 11px;border-radius:5px;display:none;max-width:60%}
 #consigne.montre{display:block}
 /* cube de vues */
 #cube{position:absolute;right:16px;top:14px;width:84px;height:84px;perspective:420px;z-index:2}
@@ -237,6 +254,7 @@ kbd{font:inherit;font-size:12.5px;background:var(--fond);border:1px solid var(--
   </div>
   <section class="scene">
     <canvas id="vue"></canvas>
+    <div id="cadres"></div>
     <div id="consigne" role="status"></div>
     <div id="bulle" role="status"></div>
     <div id="cube" aria-label="Cube de vues"><div class="corps" id="cubeCorps"></div></div>

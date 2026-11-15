@@ -9,7 +9,7 @@ Atelier de modélisation 3D pour l’impression 3D, dans une interface « à rub
 - **Créer** : poser sur le plateau des éléments issus de sept méthodes de modélisation — solides (pavé, cylindre, cône, sphère, tore, prisme), courbes NURBS (révolution), maillage polygonal, subdivision de surface, surfaces implicites (boules, gyroïde), voxels, pièces paramétriques (équerre, boîte, roue dentée).
 - **Régler** : nom, rôle, couleur, position, rotation et forme dans la fenêtre Propriétés ; points de contrôle, faces et cubes directement dans la vue.
 - **Modifier** : dupliquer, supprimer, percer (un élément « perçage » enlève de la matière), fusionner, poser, centrer, tourner.
-- **Voir** : vues de face, de dessus, de côté ; styles ombré, arêtes, filaire ; surplombs en rouge.
+- **Voir** : une à quatre fenêtres de vue redimensionnables ; dans chacune, un menu déroulant choisit la vue — 3D, plan (dessus), face, arrière, côté droit, côté gauche, section (coupe verticale réglable) ; styles ombré, arêtes, filaire ; surplombs en rouge.
 - **Imprimer** : contrôle d’imprimabilité (étanchéité, dimensions, surplombs, contact, morceaux), aperçu des couches, export STL en millimètres.
 - **Fichier** : nouveau, ouvrir, enregistrer (fichier `.modeleduc.json`), exemples.
 
