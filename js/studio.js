@@ -931,10 +931,10 @@
     const A = r.avant, B = r.apres, lignes = [['Arêtes ouvertes (trous, coutures)', A.ouvertes, B.ouvertes], ['Arêtes portant un triangle en trop', A.multiples, B.multiples], ['Arêtes entre deux faces de sens contraire', A.retournees, B.retournees]];
     const fait = [];
     if (e.ecrases) fait.push('<b>' + pl(e.ecrases, 'triangle écrasé', 'triangles écrasés') + '</b> (sans surface) ' + (diag ? 'à ôter' : 'ôté' + (e.ecrases > 1 ? 's' : '')) + '.');
-    if (e.recousus) fait.push('<b>' + pl(e.recousus, 'couture', 'coutures') + '</b> : deux faces voisines n’étaient pas découpées pareil (un sommet posé au milieu de l’arête de l’autre). ' + (diag ? 'À recoudre.' : 'Recousu.'));
+    if (e.recousus) fait.push('<b>' + pl(e.recousus, 'couture', 'coutures') + '</b> : deux faces voisines n’étaient pas découpées pareil (un sommet posé au milieu de l’arête de l’autre). ' + (diag ? 'À recoudre.' : e.recousus > 1 ? 'Recousues.' : 'Recousue.'));
     if (e.coquesEnDouble || e.trianglesEnDouble) fait.push('<b>' + pl(e.coquesEnDouble, 'objet en double', 'objets en double') + '</b> (' + n(e.trianglesEnDouble) + ' triangles) : ' + (e.coquesEnDouble > 1 ? 'les mêmes volumes étaient présents' : 'le même volume était présent') + ' deux fois, exactement au même endroit. ' + (diag ? 'À ôter.' : 'Un seul exemplaire est gardé.'));
-    if (e.retournes) fait.push('<b>' + pl(e.retournes, 'triangle à l’envers', 'triangles à l’envers') + '</b> : ' + (e.retournes > 1 ? 'leurs faces tournaient' : 'sa face tournait') + ' le dos à l’extérieur. ' + (diag ? 'À retourner.' : 'Retournés.'));
-    if (e.coquesRetournees) fait.push('<b>' + pl(e.coquesRetournees, 'volume entier à l’envers', 'volumes entiers à l’envers') + '</b>. ' + (diag ? 'À retourner.' : 'Retournés.'));
+    if (e.retournes) fait.push('<b>' + pl(e.retournes, 'triangle à l’envers', 'triangles à l’envers') + '</b> : ' + (e.retournes > 1 ? 'leurs faces tournaient' : 'sa face tournait') + ' le dos à l’extérieur. ' + (diag ? 'À retourner.' : e.retournes > 1 ? 'Retournés.' : 'Retourné.'));
+    if (e.coquesRetournees) fait.push('<b>' + pl(e.coquesRetournees, 'volume entier à l’envers', 'volumes entiers à l’envers') + '</b>. ' + (diag ? 'À retourner.' : e.coquesRetournees > 1 ? 'Retournés.' : 'Retourné.'));
     if (e.bouches) fait.push('<b>' + pl(e.bouches, 'trou', 'trous') + '</b> ' + (diag ? 'à fermer' : 'fermé' + (e.bouches > 1 ? 's' : '')) + ' par des triangles en éventail.');
     if (e.laisses) fait.push('<b>' + pl(e.laisses, 'bord', 'bords') + '</b> que l’application ne sait pas fermer (bord trop long ou qui ne se referme pas).');
     const bilan = B.etanche
