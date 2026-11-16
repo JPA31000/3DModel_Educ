@@ -12,6 +12,7 @@ Atelier de modélisation 3D pour l’impression 3D, dans une interface « à rub
 - **Voir** : une à quatre fenêtres de vue redimensionnables ; dans chacune, un menu déroulant choisit la vue — 3D, plan (dessus), face, arrière, côté droit, côté gauche, section (coupe verticale réglable) ; styles ombré, arêtes, filaire ; surplombs en rouge.
 - **Imprimer** : contrôle d’imprimabilité (étanchéité, dimensions, surplombs, contact, morceaux), aperçu des couches, export STL en millimètres.
 - **Importer** : insérer un fichier `.stl` (binaire ou texte, jusqu’à 400 000 triangles) : la pièce arrive centrée sur le plateau, son échelle se règle.
+- **Réparer** : diagnostic d’un maillage importé (arêtes ouvertes, triangles en trop, faces à l’envers, dessinés dans la vue) ; réparation : recoudre les sommets en T, ôter les objets en double, retourner les faces, boucher les petits trous. Essais : `node _src/essai-reparer.js`.
 - **Fichier** : nouveau, ouvrir, enregistrer (fichier `.modeleduc.json`), exemples.
 
 ## Fonctionnement

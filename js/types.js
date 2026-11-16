@@ -79,7 +79,7 @@
   /* Pièce importée d'un fichier STL : des triangles venus d'un autre logiciel. On ne peut régler que son échelle. */
   const importe = {
     id: 'importe', fige: true,
-    defaut: () => ({ v: [], f: [], k: 100 }),
+    defaut: () => ({ v: [], f: [], k: 100, rev: 0 }),
     construire() {
       const k = (this.etat.k || 100) / 100, s = this.etat.v, v = new Array(s.length);
       for (let i = 0; i < s.length; i++) v[i] = s[i] * k;
@@ -89,6 +89,9 @@
       ui.note(el, 'Cette pièce vient d’un <b>fichier STL</b> : elle a été dessinée dans un autre logiciel. Un STL ne contient que des <b>triangles</b> : ni cotes, ni recette de construction.');
       ui.info(el, (this.etat.f.length / 3).toLocaleString('fr-FR') + ' triangles');
       ui.curseur(el, { nom: 'Échelle', obj: this.etat, cle: 'k', min: 5, max: 400, pas: 5, unite: '%' });
+      ui.titre(el, 'Maillage');
+      ui.boutons(el, [['Diagnostic', () => ME.app.reparer('diagnostic')], ['Réparer', () => ME.app.reparer('tout'), { fort: true }]]);
+      ui.aide(el, 'Si le contrôle dit « maillage non étanche » : le diagnostic montre les défauts, la réparation les corrige (onglet Modifier, groupe Réparer le maillage).');
       ui.aide(el, 'Un STL n’indique pas son unité : l’application lit ses cotes en millimètres. Si la pièce arrive trop grande ou trop petite, règle son échelle. Tu peux la déplacer, la tourner, la percer et la fusionner comme les autres éléments.');
     },
     comprendre: atelier('polygone').comprendre

@@ -186,6 +186,12 @@ footer button{background:none;border:0;padding:0;color:var(--marine);text-decora
 .fenetre>header button:hover{background:rgba(255,255,255,.15)}
 .fenetre .corps{padding:16px 20px 20px}
 .fenetre .corps p{margin-bottom:10px;max-width:78ch}
+.rapport{border-collapse:collapse;min-width:0;width:auto;margin:6px 0 12px}
+.rapport td,.rapport th{padding:5px 14px 5px 0}
+.rapport td.n{text-align:right;font-variant-numeric:tabular-nums}
+.rapport td.bien{color:var(--ok);font-weight:600}.rapport td.mal{color:var(--erreur);font-weight:600}
+.fenetre .etapes{margin:4px 0 12px;padding-left:20px}.fenetre .etapes li{margin-bottom:5px;max-width:74ch}
+.fenetre .legende i{display:inline-block;width:22px;height:3px;vertical-align:middle;margin-right:5px}
 .fenetre .logiciels{background:var(--fond);border-radius:6px;padding:8px 11px}
 .tableau{overflow-x:auto;margin-top:10px}
 table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:820px}
@@ -238,7 +244,7 @@ kbd{font:inherit;font-size:12.5px;background:var(--fond);border:1px solid var(--
   <div id="attente-bas">
     <p id="attente-titre">Model Educ Studio</p>
     <p id="attente-sous">Modéliser en 3D, vérifier, imprimer</p>
-    <p id="attente-txt">chargement <b id="attente-pct">0 %</b><span id="attente-ver">version 1.2</span></p>
+    <p id="attente-txt">chargement <b id="attente-pct">0 %</b><span id="attente-ver">version 1.3</span></p>
     <div id="attente-licence" role="note">
       <p class="al-titre">Licence Creative Commons <b>CC BY-NC-SA 4.0</b></p>
       <p class="al-texte">Libre pour enseigner et apprendre, à trois conditions : citer l’auteur · pas d’usage commercial · partager les adaptations dans les mêmes conditions.</p>
@@ -500,6 +506,7 @@ kbd{font:inherit;font-size:12.5px;background:var(--fond);border:1px solid var(--
 
 <script src="js/moteur.js"></script>
 <script src="js/maillage.js"></script>
+<script src="js/reparer.js"></script>
 <script src="js/csg.js"></script>
 <script src="js/cage.js"></script>
 <script src="js/a1-nurbs.js"></script>

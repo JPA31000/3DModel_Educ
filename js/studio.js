@@ -4,7 +4,7 @@
    La pièce à imprimer = tous les éléments pleins visibles, auxquels on enlève les perçages. */
 (function (ME) {
   'use strict';
-  const M = ME.M, C = ME.CSG, V = ME.V, T = ME.TYPES, $ = id => document.getElementById(id);
+  const M = ME.M, C = ME.CSG, V = ME.V, R = ME.R, T = ME.TYPES, $ = id => document.getElementById(id);
   const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html !== undefined) e.innerHTML = html; return e; };
   const nb = (x, d) => { const s = (+x).toFixed(d === undefined ? 1 : d).replace('.', ','); return d === 0 ? s : s.replace(/,0+$/, ''); };
   const copie = x => JSON.parse(JSON.stringify(x));
@@ -13,11 +13,11 @@
   const CLE = 'modeleducstudio.v1.';
   const lire = cle => { try { const t = localStorage.getItem(CLE + cle); return t ? JSON.parse(t) : null; } catch (e) { return null; } };
   const ecrire = (cle, val) => { try { localStorage.setItem(CLE + cle, typeof val === 'string' ? val : JSON.stringify(val)); } catch (e) { /* stockage refusé : on continue sans */ } };
-  const reglages = Object.assign({ plateau: [220, 220, 250], couche: 0.2, surplombs: true, style: 'aretes', controle: true }, lire('reglages') || {});
+  const reglages = Object.assign({ plateau: [220, 220, 250], couche: 0.2, surplombs: true, style: 'aretes', controle: true, defauts: false }, lire('reglages') || {});
   const sauverReglages = () => ecrire('reglages', reglages);
 
   const COULEURS = [[0.60, 0.70, 0.79], [0.52, 0.76, 0.78], [0.58, 0.76, 0.60], [0.80, 0.63, 0.76], [0.86, 0.81, 0.55], [0.74, 0.74, 0.74]];
-  const VERSION = '1.2';
+  const VERSION = '1.3';
   const ROUGE = [0.87, 0.22, 0.16], ORANGE = [0.85, 0.3, 0.05, 1], LIMITE = 4500;
   const teinte = c => [c[0] * 0.5 + 0.49, c[1] * 0.5 + 0.34, c[2] * 0.5 + 0.2];
 
@@ -38,6 +38,12 @@
     equerre: '<path d="M7 5v22h20v-6H13V5z"/><circle cx="10" cy="11" r="1.4"/><circle cx="21" cy="24" r="1.4"/>',
     boite: '<path d="M6 13h20v14H6zM4 8h24v5H4zM13 18h6"/>',
     engrenage: '<circle cx="16" cy="16" r="3.5"/><path d="M16 4l2 3 3.5-1 .8 3.6 3.6.8-1 3.5 3 2.1-3 2 1 3.5-3.6.8-.8 3.6-3.5-1-2 3-2-3-3.5 1-.8-3.6-3.6-.8 1-3.5-3-2 3-2.1-1-3.5 3.6-.8.8-3.6 3.5 1z"/>',
+    diagnostic: '<circle cx="14" cy="14" r="8.500"/><path d="M20.500 20.500L28 28M10.500 14l2.500 2.500 4.500-5"/>',
+    reparer: '<path d="M5 25L13 9l10 16z"/><path d="M13 9l-1.500 16M5 25l13-8"/><path d="M21 9.500l2.500 2.500 5-6"/>',
+    doubles: '<path d="M4 22l9-5 9 5-9 5z"/><path d="M10 14l9-5 9 5-9 5z" stroke-dasharray="2.500 2.500"/><path d="M22 4l6 6M28 4l-6 6"/>',
+    retourner: '<path d="M5 24L16 6l11 18z"/><path d="M16 13v6M13 16.500l3 3 3-3"/>',
+    boucher: '<path d="M16 4l10 5.500v13L16 28 6 22.500v-13z"/><path d="M12 13l4-2.500 4 2.500v5l-4 2.500-4-2.500z" fill="currentColor" fill-opacity=".3"/>',
+    defauts: '<path d="M16 4l10 5.500v13L16 28 6 22.500v-13z" stroke-dasharray="2.500 2.500"/><path d="M6 9.500l10 5.500 10-5.500" stroke-width="2.600"/>',
     importe: '<path d="M4 25L13 8l11 17z"/><path d="M13 8l-2 17M4 25l14-8.500"/><path d="M25 3v9M20.500 7.500h9"/>',
     fige: '<path d="M16 4l10 5v14l-10 5-10-5V9z"/><path d="M6 9l10 5 10-5M16 14v14M6 23l10-9M26 23l-10-9"/>',
     dupliquer: '<rect x="5" y="5" width="15" height="15" rx="1.5"/><path d="M12 24v2.5a1.5 1.5 0 0 0 1.5 1.5H26a1.5 1.5 0 0 0 1.5-1.5V14A1.5 1.5 0 0 0 26 12.5h-2.5"/>',
@@ -85,7 +91,8 @@
   let annul = [], retab = [], dernier = '';
   const insts = new Map(), caches = new Map(), aretesDe = new WeakMap(), ouverts = {};
   let parts = [], piece = { v: [], f: [] }, analyse = null, notes = [], groupesAretes = [];
-  let tranche = null, fantome = null, glisse = null, rafr = [];
+  let tranche = null, fantome = null, glisse = null, rafr = [], enRapide = false;
+  const defautsDe = new WeakMap(); // les arêtes fautives d'un maillage, calculées une fois
 
   /* ---------- fenêtres de vue : une à quatre, chacune avec sa vue (3D, plan, face, côté, section) ---------- */
   const TYPES_VUE = [['3d', '3D'], ['dessus', 'Plan (dessus)'], ['face', 'Face'], ['arriere', 'Arrière'], ['droite', 'Côté droit'], ['gauche', 'Côté gauche'], ['section', 'Section']];
@@ -223,7 +230,7 @@
   /* maillage d'un élément dans son repère, puis sur le plateau (gardés en mémoire tant que rien ne change) */
   function local(o, rapide) {
     /* une forme figée ou importée peut peser des dizaines de milliers de triangles : on ne la relit pas en entier à chaque geste */
-    const c = cache(o), e = o.etat, k = T[o.type].proto.fige ? 'f' + e.v.length + ':' + e.f.length + ':' + (e.k || '') + ':' + e.v[0] + ':' + e.v[e.v.length >> 1] + ':' + e.v[e.v.length - 1] : JSON.stringify(e);
+    const c = cache(o), e = o.etat, k = T[o.type].proto.fige ? 'f' + e.v.length + ':' + e.f.length + ':' + (e.k || '') + ':' + (e.rev || 0) + ':' + e.v[0] + ':' + e.v[e.v.length - 1] + ':' + e.f[1] + ':' + e.f[e.f.length - 2] : JSON.stringify(e);
     if (c.cleE === k && c.local && (!c.estRapide || rapide)) return c.local;
     let m; try { m = inst(o).construire(!!rapide); } catch (e) { m = { v: [], f: [] }; }
     c.local = m; c.cleE = k; c.estRapide = !!rapide; return m;
@@ -271,6 +278,7 @@
 
   /* ---------- reconstruire la scène ---------- */
   function rendre(rapide) {
+    enRapide = !!rapide;
     const vis = P.objets.filter(o => o.vis !== false);
     for (const o of vis) monde(o, rapide && o.id === sel);
     const creux = vis.filter(o => o.role === 'creux'), pleins = vis.filter(o => o.role !== 'creux');
@@ -359,6 +367,20 @@
   };
   app.majDecor = function () {
     const fant = [], poig = []; let fins = groupesAretes.slice();
+    if (reglages.defauts) for (const x of P.objets) { // arêtes fautives des pièces importées ou fusionnées : ouvertes en rouge, en trop en violet, à l'envers en orange
+      const m = x.vis !== false && T[x.type].proto.fige && cache(x).monde; if (!m) continue;
+      let d = defautsDe.get(m); if (!d) { if (enRapide) continue; d = R.diagnostic(m); defautsDe.set(m, d); }
+      /* un trait de 1 pixel se voit mal : on pose aussi une pastille au milieu de chaque arête fautive (non cliquable) */
+      const marquer = (seg, coul) => {
+        if (!seg.length) return;
+        fant.push({ seg, c: coul });
+        const pas = Math.max(1, Math.round(seg.length / 6 / 1500));   // au plus 1 500 pastilles par sorte
+        for (let i = 0; i < seg.length; i += 6 * pas) poig.push({ id: '__d', fixe: true, t: 9, c: coul, p: [(seg[i] + seg[i + 3]) / 2, (seg[i + 1] + seg[i + 4]) / 2, (seg[i + 2] + seg[i + 5]) / 2] });
+      };
+      marquer(d.segOuvertes, [0.86, 0.1, 0.1, 1]);
+      marquer(d.segMultiples, [0.55, 0.15, 0.75, 1]);
+      marquer(d.segRetournees, [0.95, 0.5, 0.05, 1]);
+    }
     const o = selO();
     for (const x of P.objets) if (x.vis !== false && x.role === 'creux' && cache(x).monde) fant.push({ seg: aretes(cache(x).monde, 25), c: x.id === sel ? ORANGE : [0.04, 0.42, 0.49, 0.75] });
     if (o && o.vis !== false && cache(o).bb) {
@@ -610,6 +632,13 @@
       z = G('Affichage');
       B(z, 'masquer', 'Masquer', () => commande('masquer'), { inactif: sans, titre: 'Un élément masqué n’est ni contrôlé ni exporté' });
       B(z, 'afficher', 'Tout afficher', () => commande('afficherTout'), { inactif: !P.objets.some(x => x.vis === false) });
+      z = G('Réparer le maillage'); const cr = cibleRep(), sansR = !cr, tr = 'Pour une pièce importée (fichier STL) ou une forme fusionnée. ';
+      B(z, 'diagnostic', 'Diagnostic', () => app.reparer('diagnostic'), { inactif: sansR, titre: tr + 'Compter les défauts du maillage et les montrer dans la vue, sans rien changer.' });
+      B(z, 'reparer', 'Tout réparer', () => app.reparer('tout'), { inactif: sansR, titre: tr + 'Recoudre, ôter les objets en double, remettre les faces à l’endroit, boucher les trous.' });
+      B(z, 'doubles', 'Ôter les doubles', () => app.reparer('doubles'), { inactif: sansR, titre: tr + 'Ôter les objets présents deux fois au même endroit.' });
+      B(z, 'retourner', 'Retourner les faces', () => app.reparer('retourner'), { inactif: sansR, titre: tr + 'Remettre à l’endroit les triangles tournés vers l’intérieur.' });
+      B(z, 'boucher', 'Boucher les trous', () => app.reparer('boucher'), { inactif: sansR, titre: tr + 'Recoudre les arêtes qui ne se correspondent pas et fermer les petits trous.' });
+      B(z, 'defauts', 'Montrer les défauts', () => { reglages.defauts = !reglages.defauts; sauverReglages(); app.majDecor(); ruban(); }, { actif: reglages.defauts, titre: 'Dessiner les arêtes fautives : ouvertes en rouge, en trop en violet, faces à l’envers en orange' });
       B(G('Assembler'), 'fusionner', 'Fusionner', () => commande('fusionner'), { inactif: !P.objets.length, titre: 'Unir les éléments pleins visibles, enlever les perçages, et ne garder qu’un seul maillage' });
     } else if (onglet === 'vue') {
       let z = G('Fenêtres');
@@ -701,6 +730,8 @@
     ligne('Triangles', a.nbTri.toLocaleString('fr-FR'));
     $('mesures').innerHTML = lignes.join('');
     const rem = notes.slice();
+    if (!a.rapide && !a.etanche && P.objets.some(o => o.vis !== false && T[o.type].proto.fige)) rem.push('Maillage non étanche : onglet Modifier, groupe « Réparer le maillage ». Le diagnostic montre les défauts ; « Tout réparer » les corrige.');
+    if (!a.rapide && a.partagees) rem.push(a.partagees.toLocaleString('fr-FR') + ' arêtes sont communes à plusieurs volumes fermés qui se touchent (murs contre dalle, poteau sur semelle…). Ce n’est pas un défaut : le trancheur les soude.');
     if (a.recouvre) rem.push('Des éléments pleins se recouvrent. Le trancheur les soudera ; le volume et la masse comptent deux fois la partie commune. « Fusionner » (onglet Modifier) donne un seul maillage exact.');
     for (const t of rem) { const li = el('li'); li.textContent = t; $('remarques').appendChild(li); }
   }
@@ -839,12 +870,14 @@
     }
     const mn = [Infinity, Infinity, Infinity], mx = [-Infinity, -Infinity, -Infinity];
     for (let i = 0; i < t.length; i++) { const x = t[i]; if (!isFinite(x) || Math.abs(x) > 1e6) return null; const k = i % 3; if (x < mn[k]) mn[k] = x; if (x > mx[k]) mx[k] = x; }
+    /* soudure des sommets : le pas suit la taille de la pièce (une maquette de bâtiment réduite a des détails très fins) */
     const dec = [(mn[0] + mx[0]) / 2, (mn[1] + mx[1]) / 2, mn[2]], carte = new Map(), v = [], f = [];
+    const q = Math.max(1e-9, Math.max(mx[0] - mn[0], mx[1] - mn[1], mx[2] - mn[2]) * 1e-6), arr = x => Math.round(x * 1e7) / 1e7;
     for (let i = 0; i < t.length; i += 9) {
       const ids = [];
       for (let j = 0; j < 3; j++) {
-        const x = Math.round((t[i + j * 3] - dec[0]) * 1e3) / 1e3, y = Math.round((t[i + j * 3 + 1] - dec[1]) * 1e3) / 1e3, z = Math.round((t[i + j * 3 + 2] - dec[2]) * 1e3) / 1e3, cle = x + ',' + y + ',' + z;
-        let id = carte.get(cle); if (id === undefined) { id = v.length / 3; carte.set(cle, id); v.push(x, y, z); }
+        const kx = Math.round((t[i + j * 3] - dec[0]) / q), ky = Math.round((t[i + j * 3 + 1] - dec[1]) / q), kz = Math.round((t[i + j * 3 + 2] - dec[2]) / q), cle = kx + ',' + ky + ',' + kz;
+        let id = carte.get(cle); if (id === undefined) { id = v.length / 3; carte.set(cle, id); v.push(arr(kx * q), arr(ky * q), arr(kz * q)); }
         ids.push(id);
       }
       if (ids[0] !== ids[1] && ids[1] !== ids[2] && ids[0] !== ids[2]) f.push(ids[0], ids[1], ids[2]); // un triangle écrasé n'apporte rien
@@ -874,6 +907,51 @@
   }
   $('fichierSTL').addEventListener('change', ev => { const f = ev.target.files[0]; ev.target.value = ''; insererSTL(f); });
 
+  /* ---------- réparer le maillage d'une pièce importée ou fusionnée ---------- */
+  function cibleRep() {
+    const o = selO(); if (o && T[o.type].proto.fige) return o;
+    const l = P.objets.filter(x => x.vis !== false && T[x.type].proto.fige); return l.length === 1 ? l[0] : null;
+  }
+  const NOMS_REP = { diagnostic: 'Diagnostic du maillage', tout: 'Réparation du maillage', doubles: 'Objets en double', retourner: 'Faces retournées', boucher: 'Trous et coutures' };
+  app.reparer = function (quoi) {
+    const o = cibleRep();
+    if (!o) return dire('Sélectionne d’abord une pièce importée (fichier STL) ou une forme fusionnée : ce sont les seules dont le maillage peut avoir des défauts.', true);
+    /* sur une grosse pièce le calcul prend plusieurs secondes : on l'annonce, puis on laisse l'écran se redessiner */
+    if (o.etat.f.length > 60000 && !app.reparer.lance) { dire('Étude du maillage en cours… (' + (o.etat.f.length / 3).toLocaleString('fr-FR') + ' triangles, quelques secondes)'); app.reparer.lance = true; return void setTimeout(() => { try { app.reparer(quoi); } finally { app.reparer.lance = false; } }, 80); }
+    let r; try { r = R.reparer({ v: o.etat.v, f: o.etat.f }, quoi === 'diagnostic' ? 'tout' : quoi); } catch (e) { r = null; }
+    if (!r || !r.f.length) return dire('La réparation n’a pas abouti : rien n’a été changé.', true);
+    const diag = quoi === 'diagnostic', e = r.etapes, n = x => (x || 0).toLocaleString('fr-FR'), pl = (x, un, des) => n(x) + ' ' + (x > 1 ? des : un);
+    if (diag) { if (!reglages.defauts) { reglages.defauts = true; sauverReglages(); } sel = o.id; tout(); }
+    else {
+      const arr = x => Math.round(x * 1e7) / 1e7;
+      /* rev : les sommets peuvent être les mêmes et seul l'ordre des triangles changer — la mémoire des formes doit le voir */
+      o.etat = Object.assign({}, o.etat, { v: r.v.map(arr), f: r.f, rev: (o.etat.rev || 0) + 1 }); sel = o.id; poserSurPlateau(o);
+      app.valider(); app.panneau();
+    }
+    const A = r.avant, B = r.apres, lignes = [['Arêtes ouvertes (trous, coutures)', A.ouvertes, B.ouvertes], ['Arêtes portant un triangle en trop', A.multiples, B.multiples], ['Arêtes entre deux faces de sens contraire', A.retournees, B.retournees]];
+    const fait = [];
+    if (e.ecrases) fait.push('<b>' + pl(e.ecrases, 'triangle écrasé', 'triangles écrasés') + '</b> (sans surface) ' + (diag ? 'à ôter' : 'ôté' + (e.ecrases > 1 ? 's' : '')) + '.');
+    if (e.recousus) fait.push('<b>' + pl(e.recousus, 'couture', 'coutures') + '</b> : deux faces voisines n’étaient pas découpées pareil (un sommet posé au milieu de l’arête de l’autre). ' + (diag ? 'À recoudre.' : 'Recousu.'));
+    if (e.coquesEnDouble || e.trianglesEnDouble) fait.push('<b>' + pl(e.coquesEnDouble, 'objet en double', 'objets en double') + '</b> (' + n(e.trianglesEnDouble) + ' triangles) : ' + (e.coquesEnDouble > 1 ? 'les mêmes volumes étaient présents' : 'le même volume était présent') + ' deux fois, exactement au même endroit. ' + (diag ? 'À ôter.' : 'Un seul exemplaire est gardé.'));
+    if (e.retournes) fait.push('<b>' + pl(e.retournes, 'triangle à l’envers', 'triangles à l’envers') + '</b> : ' + (e.retournes > 1 ? 'leurs faces tournaient' : 'sa face tournait') + ' le dos à l’extérieur. ' + (diag ? 'À retourner.' : 'Retournés.'));
+    if (e.coquesRetournees) fait.push('<b>' + pl(e.coquesRetournees, 'volume entier à l’envers', 'volumes entiers à l’envers') + '</b>. ' + (diag ? 'À retourner.' : 'Retournés.'));
+    if (e.bouches) fait.push('<b>' + pl(e.bouches, 'trou', 'trous') + '</b> ' + (diag ? 'à fermer' : 'fermé' + (e.bouches > 1 ? 's' : '')) + ' par des triangles en éventail.');
+    if (e.laisses) fait.push('<b>' + pl(e.laisses, 'bord', 'bords') + '</b> que l’application ne sait pas fermer (bord trop long ou qui ne se referme pas).');
+    const bilan = B.etanche
+      ? '<p><b style="color:var(--ok)">' + (diag ? (A.etanche ? 'Ce maillage est déjà étanche.' : 'Après réparation, le maillage serait étanche.') : 'Le maillage est maintenant étanche.') + '</b> Il est fait de ' + pl(r.coques, 'volume fermé', 'volumes fermés') + ', en ' + pl(r.morceaux, 'morceau qui se tient', 'morceaux qui se tiennent') + '.</p>'
+      : '<p><b style="color:var(--erreur)">' + (diag ? 'Même après réparation, il resterait des défauts.' : 'Il reste des défauts que l’application ne sait pas corriger.') + '</b> Ils sont dessinés dans la vue. Il faudra reprendre la pièce dans le logiciel d’origine, ou laisser le trancheur la réparer.</p>';
+    texte(NOMS_REP[quoi] + ' — « ' + o.nom.replace(/[<&]/g, '') + ' »',
+      '<p>Un maillage est <b>étanche</b> quand chaque arête sépare exactement deux triangles, tournés du même côté : alors on sait où est la matière.</p>' +
+      '<table class="rapport"><thead><tr><th></th><th>' + (diag ? 'Aujourd’hui' : 'Avant') + '</th><th>' + (diag ? 'Après réparation' : 'Après') + '</th></tr></thead><tbody>' +
+      lignes.map(l => '<tr><td>' + l[0] + '</td><td class="n ' + (l[1] ? 'mal' : 'bien') + '">' + n(l[1]) + '</td><td class="n ' + (l[2] ? 'mal' : 'bien') + '">' + n(l[2]) + '</td></tr>').join('') +
+      '<tr><td>Triangles</td><td class="n">' + n(A.triangles) + '</td><td class="n">' + n(B.triangles) + '</td></tr></tbody></table>' +
+      (fait.length ? '<p><b>' + (diag ? 'Ce que l’application a trouvé' : 'Ce que l’application a fait') + '</b></p><ul class="etapes">' + fait.map(x => '<li>' + x + '</li>').join('') + '</ul>' : '<p>Aucun défaut à corriger par cet outil.</p>') +
+      bilan +
+      (B.partagees ? '<p>' + n(B.partagees) + ' arêtes sont communes à plusieurs volumes fermés qui se touchent (un mur contre une dalle, un poteau sur sa semelle). Ce n’est pas un défaut : le trancheur les soude.</p>' : '') +
+      (diag && !A.etanche ? '<p class="legende">Dans la vue : <i style="background:#db1a1a"></i>arêtes ouvertes · <i style="background:#8c26bf"></i>triangle en trop · <i style="background:#f2800d"></i>faces de sens contraire. Pour corriger : onglet <b>Modifier</b>, <b>Tout réparer</b>.</p>' : '') +
+      (!diag ? '<p>Un retour en arrière est possible : <kbd>Ctrl</kbd> + <kbd>Z</kbd>.</p>' : ''));
+  };
+
   const EXEMPLES = [
     { nom: 'Support percé', texte: 'un pavé, une nervure et deux perçages : les opérations booléennes',
       faire() { let o = creer('pave'); o.nom = 'Semelle'; o.etat = { lx: 70, ly: 40, lz: 10 }; o = creer('pave', [0, 0, 10]); o.nom = 'Nervure'; o.etat = { lx: 8, ly: 40, lz: 24 };
@@ -896,6 +974,7 @@
 <p><b>2. Régler.</b> L’élément sélectionné montre ses réglages dans la fenêtre <b>Propriétés</b>, à gauche : nom, rôle, position, puis sa forme. Les points de contrôle, les faces ou les cubes se manipulent directement dans la vue.</p>
 <p><b>3. Placer.</b> Dans la vue, la poignée <b>bleue</b> déplace l’élément sur le plateau, la <b>verte</b> le monte, la <b>violette</b> le fait tourner.</p>
 <p><b>Insérer un fichier STL.</b> Onglet <b>Créer</b>, bouton <b>Fichier STL</b> (ou menu Fichier) : une pièce dessinée dans un autre logiciel arrive sur le plateau, centrée et posée. Elle se déplace, se tourne, se perce et se contrôle comme les autres ; seule son <b>échelle</b> se règle.</p>
+<p><b>Réparer un maillage.</b> Une pièce importée n’est pas toujours <b>étanche</b>. Onglet <b>Modifier</b>, groupe <b>Réparer le maillage</b> : le <b>Diagnostic</b> compte les défauts et les dessine dans la vue ; <b>Tout réparer</b> recoud les arêtes, ôte les objets en double, remet les faces à l’endroit et bouche les petits trous.</p>
 <p><b>4. Percer et assembler.</b> Onglet <b>Modifier</b> : un élément passé en <b>Perçage</b> enlève de la matière aux éléments pleins qu’il traverse. <b>Fusionner</b> remplace tous les éléments par un seul maillage.</p>
 <p><b>5. Regarder.</b> Glisser : tourner la vue 3D. Clic droit ou <kbd>Maj</kbd> + glisser : déplacer la vue. Molette : zoom. Le <b>cube</b> en haut à droite de la vue 3D la tourne vers la face, le dessus, le côté.</p>
 <p><b>6. Plusieurs vues.</b> Onglet <b>Vue</b> : affiche 1, 2, 3 ou 4 fenêtres. Le <b>menu déroulant en haut à gauche</b> de chaque fenêtre choisit ce qu’elle montre : 3D, plan (dessus), face, arrière, côté droit, côté gauche ou <b>section</b>. Glisse les <b>séparateurs</b> entre les fenêtres pour les redimensionner. Les vues en plan, de face, de côté et la section sont sans perspective : on y glisse pour déplacer la vue, et on peut y sélectionner et déplacer les éléments comme en 3D.</p>
@@ -985,5 +1064,5 @@
   ouvrirAccueil();
 
   /* pour les essais */
-  app.essai = { etat: () => ({ P, sel, outil, onglet, analyse, notes, piece, annul: annul.length, retab: retab.length }), creer, selectionner, commande, installer, nouveau, verifier, EXEMPLES, prendreOutil, allerVue, cache, obj, vues, F, choisirVue, nbVues, lireSTL, insererSTL, setOnglet: k => { onglet = k; ruban(); } };
+  app.essai = { etat: () => ({ P, sel, outil, onglet, analyse, notes, piece, annul: annul.length, retab: retab.length }), creer, selectionner, commande, installer, nouveau, verifier, EXEMPLES, prendreOutil, allerVue, cache, obj, vues, F, choisirVue, nbVues, lireSTL, insererSTL, cibleRep, setOnglet: k => { onglet = k; ruban(); } };
 })(globalThis.ME = globalThis.ME || {});

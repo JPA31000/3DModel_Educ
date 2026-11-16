@@ -78,7 +78,7 @@
   M.analyser = function (m, opts) {
     const v = m.v, f = m.f, nt = f.length / 3, nv = v.length / 3;
     const r = { nbTri: nt, nbSommets: nv, min: [0, 0, 0], max: [0, 0, 0], dims: [0, 0, 0], volume: 0, aire: 0,
-      ouvertes: 0, nonVariete: 0, retournees: 0, etanche: true, pieces: 1, surplombAire: 0, contact: 0,
+      ouvertes: 0, nonVariete: 0, retournees: 0, partagees: 0, etanche: true, pieces: 1, surplombAire: 0, contact: 0,
       surplomb: new Uint8Array(nt), sousPlateau: false, horsPlateau: false, masse: 0, massePleine: 0, couches: 0, vide: nt === 0 };
     if (!nt) { r.etanche = false; return r; }
     let x0 = Infinity, y0 = Infinity, z0 = Infinity, x1 = -Infinity, y1 = -Infinity, z1 = -Infinity;
@@ -125,7 +125,9 @@
     }
     for (const e of aretes.values()) {
       const n = ((e % 4096) + 4096) % 4096, sens = Math.round((e - n) / 4096);
-      if (n === 1) r.ouvertes++; else if (n > 2) r.nonVariete++; else if (sens !== 0) r.retournees++;
+      /* plus de deux triangles sur une arête : si les sens s'équilibrent, ce sont des volumes fermés qui se touchent
+         (murs contre dalle…), le trancheur les soude ; sinon c'est un vrai défaut */
+      if (n === 1) r.ouvertes++; else if (n > 2) { if (sens === 0) r.partagees++; else r.nonVariete++; } else if (sens !== 0) r.retournees++;
     }
     r.etanche = r.ouvertes === 0 && r.nonVariete === 0 && r.retournees === 0;
     const vus = new Set(); for (let t = 0; t < nt; t++) vus.add(racine(f[t * 3])); r.pieces = vus.size;
