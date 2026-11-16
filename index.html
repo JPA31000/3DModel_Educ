@@ -230,6 +230,183 @@ kbd{font:inherit;font-size:12.5px;background:var(--fond);border:1px solid var(--
 </style>
 </head>
 <body>
+<!-- ===================== ÉCRAN D'OUVERTURE =====================
+     Même principe que celui de BIM Éducation : il est posé avant tout le reste, pour être peint le premier ;
+     une animation occupe l'attente, le compteur monte, « Entrer » apparaît à 40 %, puis l'écran s'efface. -->
+<div id="ecran-attente" role="status" aria-label="Ouverture de Model Educ Studio">
+  <canvas id="attente-toile" width="960" height="540" aria-hidden="true"></canvas>
+  <div id="attente-bas">
+    <p id="attente-titre">Model Educ Studio</p>
+    <p id="attente-sous">Modéliser en 3D, vérifier, imprimer</p>
+    <p id="attente-txt">chargement <b id="attente-pct">0 %</b><span id="attente-ver">version 1.2</span></p>
+    <div id="attente-licence" role="note">
+      <p class="al-titre">Licence Creative Commons <b>CC BY-NC-SA 4.0</b></p>
+      <p class="al-texte">Libre pour enseigner et apprendre, à trois conditions : citer l’auteur · pas d’usage commercial · partager les adaptations dans les mêmes conditions.</p>
+      <p class="al-credit">Sur une idée de : Jean-Philippe Amat | Créateur : Claude | Licence CC BY-NC-SA 4.0</p>
+      <button type="button" id="attente-licence-lien">Que veut dire cette licence ? ›</button>
+    </div>
+    <div id="attente-jauge"><i id="attente-barre"></i></div>
+    <button id="attente-entrer" type="button" hidden>Entrer</button>
+  </div>
+</div>
+<style>
+#ecran-attente{position:fixed; inset:0; z-index:99999; background:#000;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  overflow:hidden; transition:opacity .45s ease; cursor:pointer}
+#attente-toile{width:480px; max-width:92vw; height:auto; aspect-ratio:16/9; display:block; background:#000}
+#attente-bas{width:480px; max-width:92vw; padding:14px 0 0; text-align:center; color:#f3ece0;
+  pointer-events:none; font-family:'Segoe UI', system-ui, sans-serif}
+#attente-bas p{margin:0}
+#attente-titre{margin:0 0 2px!important; font-size:19px; font-weight:600; letter-spacing:.04em}
+#attente-sous{margin:0 0 6px!important; font-size:12.5px; opacity:.75}
+#attente-ver{margin-left:10px; padding-left:10px; border-left:1px solid rgba(255,255,255,.28)}
+#attente-txt{font-size:10.5px; opacity:.62; letter-spacing:.06em; text-transform:uppercase}
+#attente-pct{font-weight:700; opacity:.95; font-variant-numeric:tabular-nums}
+#attente-licence{margin:12px 0 0; padding:9px 14px 10px; text-align:center; color:#f3ece0;
+  border:1px solid rgba(251,146,60,.42); border-radius:6px; background:rgba(251,146,60,.07)}
+#attente-licence .al-titre{font-size:13px; font-weight:600}
+#attente-licence .al-titre b{color:#fdba74}
+#attente-licence .al-texte{margin-top:3px; font-size:11.5px; line-height:1.45; opacity:.9}
+#attente-licence .al-credit{margin-top:6px; font-size:10px; opacity:.55; letter-spacing:.03em}
+#attente-licence-lien{margin-top:7px; padding:3px 6px; border:0; background:none; color:#fdba74;
+  font:600 12px 'Segoe UI', sans-serif; text-decoration:underline; text-underline-offset:3px;
+  cursor:pointer; pointer-events:auto}
+#attente-licence-lien:hover{color:#fff}
+#attente-jauge{margin:11px auto 0; width:180px; height:2px; background:#2a2723; border-radius:2px; overflow:hidden}
+#attente-barre{display:block; width:0; height:100%; background:#fb923c; transition:width .12s linear}
+#attente-entrer{margin-top:14px; padding:8px 26px; font:600 13px/1 'Segoe UI', sans-serif;
+  color:#241d14; background:#fdba74; border:0; border-radius:3px; cursor:pointer;
+  pointer-events:auto; box-shadow:0 2px 10px rgba(0,0,0,.4)}
+#attente-entrer:hover{background:#fed7aa}
+#attente-entrer[hidden]{display:none}
+#dlg-licence{border:0; border-radius:8px; padding:0; max-width:560px; width:calc(100% - 32px); color:#1d242b; box-shadow:0 20px 60px rgba(0,0,0,.45); font:14.5px/1.45 'Segoe UI', system-ui, sans-serif}
+#dlg-licence::backdrop{background:rgba(0,0,0,.6)}
+#dlg-licence .dl-corps{padding:18px 22px 18px; display:grid; gap:11px}
+#dlg-licence h2{margin:0; font-size:18px; color:#233a5e}
+#dlg-licence p{margin:0}
+#dlg-licence .dl-trois{display:grid; gap:7px}
+#dlg-licence .dl-trois div{display:flex; gap:10px; align-items:flex-start}
+#dlg-licence .sigle{flex:none; width:38px; text-align:center; background:#233a5e; color:#fff; border-radius:4px; font-size:12.5px; padding:2px 0}
+#dlg-licence .dl-citer{background:#f0f0f0; border-left:4px solid #c2410c; padding:8px 11px; font-size:13.5px}
+#dlg-licence .petit{font-size:12.5px; color:#57616b}
+#dlg-licence .dl-boutons{display:flex; gap:8px; justify-content:flex-end}
+#dlg-licence button{border:1px solid #c9cdd2; background:#fff; border-radius:5px; padding:6px 14px; font:inherit; cursor:pointer}
+#dlg-licence button.principal{background:#c2410c; border-color:#c2410c; color:#fff; font-weight:600}
+@media (prefers-reduced-motion:reduce){ #ecran-attente{transition:none} }
+</style>
+<dialog id="dlg-licence">
+  <div class="dl-corps">
+    <h2>Licence et crédits</h2>
+    <p>Model Educ Studio est mis à disposition selon la licence Creative Commons <b>CC BY-NC-SA 4.0</b> : vous pouvez l’utiliser, le copier et l’adapter pour enseigner et apprendre, à trois conditions.</p>
+    <div class="dl-trois">
+      <div><b class="sigle">BY</b><span><b>Citer l’auteur.</b> Toute copie ou adaptation garde la mention de l’origine.</span></div>
+      <div><b class="sigle">NC</b><span><b>Pas d’usage commercial.</b> Ni vente, ni service payant bâti dessus.</span></div>
+      <div><b class="sigle">SA</b><span><b>Partage dans les mêmes conditions.</b> Une version modifiée se diffuse sous la même licence.</span></div>
+    </div>
+    <p style="font-weight:600">La phrase à citer</p>
+    <div class="dl-citer" id="dl-phrase">Model Educ Studio — sur une idée de Jean-Philippe Amat, créé avec Claude — licence CC BY-NC-SA 4.0.</div>
+    <p class="petit">Outil pédagogique, pas un logiciel professionnel. Texte officiel de la licence : creativecommons.org/licenses/by-nc-sa/4.0/deed.fr</p>
+    <div class="dl-boutons"><button type="button" id="dl-copier">Copier la phrase</button><button type="button" class="principal" id="dl-fermer">Fermer</button></div>
+  </div>
+</dialog>
+<script>
+/* L'écran d'ouverture : il compte le temps (9 secondes), fait monter le compteur et dessine l'animation.
+   Rien ici ne dépend du reste de la page : même si le script principal échouait, on peut toujours entrer. */
+(function ecranDAttente() {
+  const e = document.getElementById('ecran-attente'), dlg = document.getElementById('dlg-licence'); if (!e) return;
+  document.getElementById('dl-fermer').onclick = () => dlg.close();
+  dlg.addEventListener('click', ev => { if (ev.target === dlg) dlg.close(); });
+  document.getElementById('dl-copier').onclick = async ev => {
+    const t = document.getElementById('dl-phrase').textContent;
+    try { await navigator.clipboard.writeText(t); ev.target.textContent = 'Copié'; }
+    catch (_) { const z = document.createElement('textarea'); z.value = t; document.body.appendChild(z); z.select(); try { document.execCommand('copy'); ev.target.textContent = 'Copié'; } catch (__) {} z.remove(); }
+    setTimeout(() => { ev.target.textContent = 'Copier la phrase'; }, 1800);
+  };
+  /* Rechargement de la page dans le même onglet (on travaille déjà), ou adresse « ?direct » : pas d'écran. */
+  let deja = false; try { deja = sessionStorage.getItem('modelEducStudioOuvert') === '1'; } catch (_) {}
+  if (deja || /[?&]direct\b/.test(location.search)) { e.remove(); return; }
+  try { sessionStorage.setItem('modelEducStudioOuvert', '1'); } catch (_) {}
+  const toile = document.getElementById('attente-toile'), c = toile.getContext('2d'), bouton = document.getElementById('attente-entrer'),
+    barre = document.getElementById('attente-barre'), pct = document.getElementById('attente-pct');
+  const DUREE = 9000, SEUIL = 40, debut = performance.now();
+  let parti = false, retenue = false, retenuDepuis = 0, pause = 0, dernier = -1;
+
+  /* ---- la scène : une pièce qui s'imprime couche par couche sur le plateau, puis son maillage de triangles ---- */
+  const COUCHES = 44, TOURS = 40, HAUT = 3.6;
+  const rayon = t => 0.95 + 0.72 * Math.sin(Math.PI * (0.1 + 1.05 * t)) - 0.5 * t * t + 0.28 * Math.pow(t, 6); // le profil du vase
+  function dessiner(p) {
+    const L = toile.width, H = toile.height, lacet = -0.9 + p * 1.7, co = Math.cos(lacet), si = Math.sin(lacet), el = 0.42, ce = Math.cos(el), se = Math.sin(el);
+    const proj = (x, y, z) => { const X = x * co - y * si, Y = x * si + y * co, yy = Y * ce + (z - 1.5) * se + 15, zz = (z - 1.5) * ce - Y * se, k = 1500 / yy; return [L / 2 + X * k, H / 2 + 26 - zz * k]; };
+    const trait = (a, b) => { c.moveTo(a[0], a[1]); c.lineTo(b[0], b[1]); };
+    c.fillStyle = '#000'; c.fillRect(0, 0, L, H);
+    /* le plateau et sa grille */
+    c.lineWidth = 1; c.strokeStyle = 'rgba(120,150,190,.34)'; c.beginPath();
+    for (let i = -6; i <= 6; i++) { trait(proj(i * 0.5, -3, 0), proj(i * 0.5, 3, 0)); trait(proj(-3, i * 0.5, 0), proj(3, i * 0.5, 0)); }
+    c.stroke();
+    c.lineWidth = 2; c.strokeStyle = 'rgba(150,180,220,.7)'; c.beginPath();
+    trait(proj(-3, -3, 0), proj(3, -3, 0)); trait(proj(3, -3, 0), proj(3, 3, 0)); trait(proj(3, 3, 0), proj(-3, 3, 0)); trait(proj(-3, 3, 0), proj(-3, -3, 0)); c.stroke();
+    /* les couches déjà déposées ; la dernière se dessine en tournant, sous la buse */
+    const avance = Math.min(1, p / 0.7) * COUCHES, pleines = Math.floor(avance), part = avance - pleines;
+    const anneau = (i, jusqua) => {
+      const z = (i + 0.5) / COUCHES * HAUT, r = rayon(i / (COUCHES - 1)), n = Math.max(1, Math.round(TOURS * jusqua));
+      c.beginPath();
+      for (let k = 0; k <= n; k++) { const a = k / TOURS * 6.2832, q = proj(r * Math.cos(a), r * Math.sin(a), z); if (k) c.lineTo(q[0], q[1]); else c.moveTo(q[0], q[1]); }
+      c.stroke(); return [r, z, n / TOURS * 6.2832];
+    };
+    for (let i = 0; i < pleines && i < COUCHES; i++) {
+      const age = Math.min(1, (avance - i) / 6), f = 150 + Math.round(60 * (i / COUCHES));
+      c.lineWidth = 3.2; c.strokeStyle = 'rgba(' + Math.round(251 - 20 * age) + ',' + Math.round(200 - 54 * age) + ',' + Math.round(140 - 80 * age) + ',' + (0.95 - 0.25 * age) + ')';
+      if (p > 0.74) c.strokeStyle = 'rgba(231,' + (f - 20) + ',70,' + Math.max(0.28, 0.7 - (p - 0.74) * 2.2) + ')';
+      anneau(i, 1);
+    }
+    if (pleines < COUCHES) {
+      c.lineWidth = 3.6; c.strokeStyle = '#fff3e0';
+      const [r, z, a] = anneau(pleines, part), b = proj(r * Math.cos(a), r * Math.sin(a), z), h = proj(r * Math.cos(a), r * Math.sin(a), z + 0.55), g1 = proj(-3, r * Math.sin(a), z + 0.55), g2 = proj(3, r * Math.sin(a), z + 0.55);
+      c.lineWidth = 1.5; c.strokeStyle = 'rgba(150,180,220,.55)'; c.beginPath(); trait(g1, g2); c.stroke();        // le portique
+      c.fillStyle = '#fb923c'; c.beginPath(); c.moveTo(b[0], b[1]); c.lineTo(h[0] - 9, h[1]); c.lineTo(h[0] + 9, h[1]); c.closePath(); c.fill();   // la buse
+      c.fillStyle = 'rgba(255,240,210,.9)'; c.beginPath(); c.arc(b[0], b[1], 4.5, 0, 7); c.fill();
+    }
+    /* à la fin : le maillage de triangles de la pièce, celui que contient le fichier STL */
+    if (p > 0.74) {
+      const q = Math.min(1, (p - 0.74) / 0.2), M = 16, N = 11, pt = (i, j) => { const t = j / N, a = i / M * 6.2832, r = rayon(t); return proj(r * Math.cos(a), r * Math.sin(a), (t * (COUCHES - 1) + 0.5) / COUCHES * HAUT); };
+      c.lineWidth = 1.3; c.strokeStyle = 'rgba(190,215,250,' + 0.85 * q + ')'; c.beginPath();
+      const jmax = Math.floor(N * q);
+      for (let j = 0; j < jmax; j++) for (let i = 0; i < M; i++) { trait(pt(i, j), pt(i + 1, j)); trait(pt(i, j), pt(i, j + 1)); trait(pt(i, j), pt(i + 1, j + 1)); }
+      for (let i = 0; i < M && jmax > 0; i++) trait(pt(i, jmax), pt(i + 1, jmax));
+      c.stroke();
+    }
+  }
+  const temps = () => performance.now() - debut - pause - (retenue ? performance.now() - retenuDepuis : 0);
+  function avancer() {
+    const p = Math.max(0, Math.min(1, temps() / DUREE)), n = Math.round(p * 100);
+    dessiner(p);
+    if (n !== dernier) { dernier = n; barre.style.width = n + '%'; pct.textContent = n + ' %'; bouton.hidden = n < SEUIL; }
+    if (n >= 100) fermer();
+  }
+  function fermer() {
+    if (parti || retenue) return;
+    parti = true; clearInterval(battement);
+    barre.style.width = '100%'; pct.textContent = '100 %';
+    e.style.opacity = '0'; e.style.pointerEvents = 'none';
+    document.removeEventListener('keydown', surTouche, true);
+    setTimeout(() => e.remove(), 460);
+  }
+  window.__attenteFermer = fermer;
+  /* tant que l'écran est là, les touches ne vont pas à l'application ; une touche fait entrer, mais pas avant 40 % */
+  const surTouche = ev => { if (retenue) return; ev.stopPropagation(); if (dernier >= SEUIL) fermer(); };
+  document.addEventListener('keydown', surTouche, true);
+  const battement = setInterval(avancer, 40); avancer();
+  bouton.addEventListener('click', ev => { ev.stopPropagation(); fermer(); });
+  e.addEventListener('click', () => { if (dernier >= SEUIL) fermer(); });          // un clic n'importe où, mais pas avant 40 %
+  /* « Que veut dire cette licence ? » : la fenêtre s'ouvre par-dessus, et le compteur attend qu'on l'ait fermée. */
+  document.getElementById('attente-licence-lien').addEventListener('click', ev => {
+    ev.stopPropagation(); if (retenue) return;
+    retenue = true; retenuDepuis = performance.now();
+    dlg.addEventListener('close', () => { pause += performance.now() - retenuDepuis; retenue = false; }, { once: true });
+    dlg.showModal();
+  });
+})();
+</script>
 <div class="onglets" id="onglets">
   <button id="btnFichier" aria-haspopup="true" aria-expanded="false">Fichier</button>
   <div id="menuFichier" role="menu"></div>
@@ -311,6 +488,7 @@ kbd{font:inherit;font-size:12.5px;background:var(--fond);border:1px solid var(--
     <h3>Commencer</h3>
     <button class="principal" id="accNouveau"><b>Nouveau projet</b><span>un plateau vide, prêt à recevoir tes éléments</span></button>
     <button id="accReprendre"><b>Reprendre mon travail</b><span id="accReprendreTexte">le projet gardé dans ce navigateur</span></button>
+    <button id="accSTL"><b>Insérer un fichier STL</b><span>ajouter au projet une pièce dessinée dans un autre logiciel</span></button>
     <h3>Ouvrir un exemple</h3>
     <div id="accExemples" style="display:flex;flex-direction:column;gap:9px"></div>
     <p class="licence">Sur une idée de Jean-Philippe Amat, lycée Urbain Vitry (Toulouse) · Créateur : Claude · Licence CC BY-NC-SA 4.0</p>
@@ -318,6 +496,7 @@ kbd{font:inherit;font-size:12.5px;background:var(--fond);border:1px solid var(--
 </div></div>
 
 <input type="file" id="fichierOuvrir" accept=".json,application/json" hidden>
+<input type="file" id="fichierSTL" accept=".stl,model/stl" hidden>
 
 <script src="js/moteur.js"></script>
 <script src="js/maillage.js"></script>

@@ -65,7 +65,7 @@
 
   /* Forme figée : le résultat d'une fusion. Elle n'a plus de paramètres, seulement des triangles. */
   const fige = {
-    id: 'fige',
+    id: 'fige', fige: true,
     defaut: () => ({ v: [], f: [] }),
     construire() { return { v: this.etat.v, f: this.etat.f, lissage: 30 }; },
     panneau(el, ui) {
@@ -74,6 +74,24 @@
       ui.aide(el, 'C’est ce qui arrive aussi dans un fichier STL : il ne garde que des triangles, pas la recette.');
     },
     comprendre: atelier('solides').comprendre
+  };
+
+  /* Pièce importée d'un fichier STL : des triangles venus d'un autre logiciel. On ne peut régler que son échelle. */
+  const importe = {
+    id: 'importe', fige: true,
+    defaut: () => ({ v: [], f: [], k: 100 }),
+    construire() {
+      const k = (this.etat.k || 100) / 100, s = this.etat.v, v = new Array(s.length);
+      for (let i = 0; i < s.length; i++) v[i] = s[i] * k;
+      return { v, f: this.etat.f, lissage: 30 };
+    },
+    panneau(el, ui) {
+      ui.note(el, 'Cette pièce vient d’un <b>fichier STL</b> : elle a été dessinée dans un autre logiciel. Un STL ne contient que des <b>triangles</b> : ni cotes, ni recette de construction.');
+      ui.info(el, (this.etat.f.length / 3).toLocaleString('fr-FR') + ' triangles');
+      ui.curseur(el, { nom: 'Échelle', obj: this.etat, cle: 'k', min: 5, max: 400, pas: 5, unite: '%' });
+      ui.aide(el, 'Un STL n’indique pas son unité : l’application lit ses cotes en millimètres. Si la pièce arrive trop grande ou trop petite, règle son échelle. Tu peux la déplacer, la tourner, la percer et la fusionner comme les autres éléments.');
+    },
+    comprendre: atelier('polygone').comprendre
   };
 
   const prereglage = (id, regler) => { const a = atelier(id), p = Object.create(a); p.defaut = () => { const e = a.defaut(); regler(e); return e; }; return p; };
@@ -91,5 +109,6 @@
   ajouter('equerre', 'Équerre', 'Paramétrique', 'Modélisation paramétrique', prereglage('parametrique', e => { e.modele = 'equerre'; }));
   ajouter('boite', 'Boîte', 'Paramétrique', 'Modélisation paramétrique', prereglage('parametrique', e => { e.modele = 'boite'; }));
   ajouter('engrenage', 'Roue dentée', 'Paramétrique', 'Modélisation paramétrique', prereglage('parametrique', e => { e.modele = 'engrenage'; }));
+  ajouter('importe', 'Pièce importée', null, 'Maillage importé (fichier STL)', importe);
   ajouter('fige', 'Forme fusionnée', null, 'Maillage figé (résultat d’une fusion)', fige);
 })(globalThis.ME = globalThis.ME || {});

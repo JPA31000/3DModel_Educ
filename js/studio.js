@@ -17,6 +17,7 @@
   const sauverReglages = () => ecrire('reglages', reglages);
 
   const COULEURS = [[0.60, 0.70, 0.79], [0.52, 0.76, 0.78], [0.58, 0.76, 0.60], [0.80, 0.63, 0.76], [0.86, 0.81, 0.55], [0.74, 0.74, 0.74]];
+  const VERSION = '1.2';
   const ROUGE = [0.87, 0.22, 0.16], ORANGE = [0.85, 0.3, 0.05, 1], LIMITE = 4500;
   const teinte = c => [c[0] * 0.5 + 0.49, c[1] * 0.5 + 0.34, c[2] * 0.5 + 0.2];
 
@@ -37,6 +38,7 @@
     equerre: '<path d="M7 5v22h20v-6H13V5z"/><circle cx="10" cy="11" r="1.4"/><circle cx="21" cy="24" r="1.4"/>',
     boite: '<path d="M6 13h20v14H6zM4 8h24v5H4zM13 18h6"/>',
     engrenage: '<circle cx="16" cy="16" r="3.5"/><path d="M16 4l2 3 3.5-1 .8 3.6 3.6.8-1 3.5 3 2.1-3 2 1 3.5-3.6.8-.8 3.6-3.5-1-2 3-2-3-3.5 1-.8-3.6-3.6-.8 1-3.5-3-2 3-2.1-1-3.5 3.6-.8.8-3.6 3.5 1z"/>',
+    importe: '<path d="M4 25L13 8l11 17z"/><path d="M13 8l-2 17M4 25l14-8.500"/><path d="M25 3v9M20.500 7.500h9"/>',
     fige: '<path d="M16 4l10 5v14l-10 5-10-5V9z"/><path d="M6 9l10 5 10-5M16 14v14M6 23l10-9M26 23l-10-9"/>',
     dupliquer: '<rect x="5" y="5" width="15" height="15" rx="1.5"/><path d="M12 24v2.5a1.5 1.5 0 0 0 1.5 1.5H26a1.5 1.5 0 0 0 1.5-1.5V14A1.5 1.5 0 0 0 26 12.5h-2.5"/>',
     supprimer: '<path d="M6 9h20M12 9V5.5h8V9M8.5 9l1.2 17.5h12.6L23.5 9M13 14v8M19 14v8"/>',
@@ -220,7 +222,8 @@
 
   /* maillage d'un élément dans son repère, puis sur le plateau (gardés en mémoire tant que rien ne change) */
   function local(o, rapide) {
-    const c = cache(o), k = JSON.stringify(o.etat);
+    /* une forme figée ou importée peut peser des dizaines de milliers de triangles : on ne la relit pas en entier à chaque geste */
+    const c = cache(o), e = o.etat, k = T[o.type].proto.fige ? 'f' + e.v.length + ':' + e.f.length + ':' + (e.k || '') + ':' + e.v[0] + ':' + e.v[e.v.length >> 1] + ':' + e.v[e.v.length - 1] : JSON.stringify(e);
     if (c.cleE === k && c.local && (!c.estRapide || rapide)) return c.local;
     let m; try { m = inst(o).construire(!!rapide); } catch (e) { m = { v: [], f: [] }; }
     c.local = m; c.cleE = k; c.estRapide = !!rapide; return m;
@@ -572,6 +575,7 @@
         if (t.groupe !== groupe) { groupe = t.groupe; z = G(groupe); }
         B(z, k, t.nom, () => prendreOutil(outil === k ? null : k), { actif: outil === k, titre: t.nom + ' — ' + t.methode + '. Clique ensuite sur le plateau.' });
       }
+      B(G('Importer'), 'importe', 'Fichier STL', () => $('fichierSTL').click(), { titre: 'Insérer dans le projet une pièce venue d’un autre logiciel (fichier .stl)' });
     } else if (onglet === 'modifier') {
       const sans = !o; let z = G('Élément');
       B(z, 'dupliquer', 'Dupliquer', () => commande('dupliquer'), { inactif: sans, titre: 'Copier l’élément sélectionné (Ctrl + D)' });
@@ -799,6 +803,57 @@
     lecteur.readAsText(f);
   });
 
+  /* ---------- insérer un fichier STL ---------- */
+  const MAX_STL = 60000; // triangles : au-delà, la page devient lente et le projet ne tient plus dans la mémoire du navigateur
+  /* Lit un STL binaire ou texte. Rend { v, f } (sommets soudés, pièce centrée et posée sur z = 0), { trop: n } ou null. */
+  function lireSTL(buf) {
+    const dv = new DataView(buf), nb = buf.byteLength >= 84 ? dv.getUint32(80, true) : -1; let t;
+    if (nb > 0 && 84 + nb * 50 === buf.byteLength) { // binaire : 80 octets d'en-tête, le nombre de triangles, puis 50 octets par triangle
+      if (nb > MAX_STL) return { trop: nb };
+      t = new Float64Array(nb * 9);
+      for (let i = 0; i < nb; i++) for (let k = 0; k < 9; k++) t[i * 9 + k] = dv.getFloat32(84 + i * 50 + 12 + k * 4, true);
+    } else { // texte : des lignes « vertex x y z »
+      const txt = new TextDecoder().decode(buf), re = /vertex\s+(\S+)\s+(\S+)\s+(\S+)/g, l = []; let m;
+      while ((m = re.exec(txt))) { l.push(+m[1], +m[2], +m[3]); if (l.length > MAX_STL * 9 + 9) return { trop: Math.round((txt.match(/vertex/g) || []).length / 3) }; }
+      if (l.length < 9 || l.length % 9) return null;
+      t = Float64Array.from(l);
+    }
+    const mn = [Infinity, Infinity, Infinity], mx = [-Infinity, -Infinity, -Infinity];
+    for (let i = 0; i < t.length; i++) { const x = t[i]; if (!isFinite(x) || Math.abs(x) > 1e6) return null; const k = i % 3; if (x < mn[k]) mn[k] = x; if (x > mx[k]) mx[k] = x; }
+    const dec = [(mn[0] + mx[0]) / 2, (mn[1] + mx[1]) / 2, mn[2]], carte = new Map(), v = [], f = [];
+    for (let i = 0; i < t.length; i += 9) {
+      const ids = [];
+      for (let j = 0; j < 3; j++) {
+        const x = Math.round((t[i + j * 3] - dec[0]) * 1e3) / 1e3, y = Math.round((t[i + j * 3 + 1] - dec[1]) * 1e3) / 1e3, z = Math.round((t[i + j * 3 + 2] - dec[2]) * 1e3) / 1e3, cle = x + ',' + y + ',' + z;
+        let id = carte.get(cle); if (id === undefined) { id = v.length / 3; carte.set(cle, id); v.push(x, y, z); }
+        ids.push(id);
+      }
+      if (ids[0] !== ids[1] && ids[1] !== ids[2] && ids[0] !== ids[2]) f.push(ids[0], ids[1], ids[2]); // un triangle écrasé n'apporte rien
+    }
+    return f.length ? { v, f, dims: [mx[0] - mn[0], mx[1] - mn[1], mx[2] - mn[2]] } : null;
+  }
+  function insererSTL(fichier) {
+    if (!fichier) return;
+    if (fichier.size > 40e6) return dire('Ce fichier est trop gros pour l’application (plus de 40 Mo).', true);
+    const lecteur = new FileReader();
+    lecteur.onload = () => {
+      let m = null; try { m = lireSTL(lecteur.result); } catch (e) { m = null; }
+      if (!m) return dire('Ce fichier n’est pas un STL lisible : rien n’a été ajouté.', true);
+      if (m.trop) return dire('Ce STL compte ' + m.trop.toLocaleString('fr-FR') + ' triangles : c’est trop pour l’application (limite ' + MAX_STL.toLocaleString('fr-FR') + '). Simplifie-le d’abord dans un autre logiciel.', true);
+      const o = creer('importe'), pl = reglages.plateau, d = m.dims;
+      o.nom = (fichier.name.replace(/\.stl$/i, '').trim() || 'Pièce importée').slice(0, 40); o.etat = { v: m.v, f: m.f, k: 100 };
+      /* un STL n'a pas d'unité : s'il déborde du plateau, on le réduit pour qu'il y tienne (l'élève peut revenir à 100 %) */
+      const r = Math.min(pl[0] / d[0], pl[1] / d[1], pl[2] / d[2]);
+      if (r < 1) o.etat.k = Math.max(5, Math.floor(r * 100 / 5) * 5);
+      sel = o.id; outil = null; fermerFenetres(); app.valider(); app.panneau(); app.cadrer();
+      const n = (m.f.length / 3).toLocaleString('fr-FR');
+      dire(r < 1 ? 'STL inséré (' + n + ' triangles). Il dépassait du plateau : son échelle est réglée à ' + o.etat.k + ' %.' : 'STL inséré : ' + n + ' triangles, lus en millimètres.', r < 1);
+    };
+    lecteur.onerror = () => dire('Le fichier n’a pas pu être lu.', true);
+    lecteur.readAsArrayBuffer(fichier);
+  }
+  $('fichierSTL').addEventListener('change', ev => { const f = ev.target.files[0]; ev.target.value = ''; insererSTL(f); });
+
   const EXEMPLES = [
     { nom: 'Support percé', texte: 'un pavé, une nervure et deux perçages : les opérations booléennes',
       faire() { let o = creer('pave'); o.nom = 'Semelle'; o.etat = { lx: 70, ly: 40, lz: 10 }; o = creer('pave', [0, 0, 10]); o.nom = 'Nervure'; o.etat = { lx: 8, ly: 40, lz: 24 };
@@ -820,6 +875,7 @@
 <p><b>1. Créer.</b> Dans l’onglet <b>Créer</b>, clique un outil (Pavé, Révolution, Voxels…), puis clique sur le plateau : l’élément est posé là. Un clic sur le dessus d’un élément pose le nouveau dessus.</p>
 <p><b>2. Régler.</b> L’élément sélectionné montre ses réglages dans la fenêtre <b>Propriétés</b>, à gauche : nom, rôle, position, puis sa forme. Les points de contrôle, les faces ou les cubes se manipulent directement dans la vue.</p>
 <p><b>3. Placer.</b> Dans la vue, la poignée <b>bleue</b> déplace l’élément sur le plateau, la <b>verte</b> le monte, la <b>violette</b> le fait tourner.</p>
+<p><b>Insérer un fichier STL.</b> Onglet <b>Créer</b>, bouton <b>Fichier STL</b> (ou menu Fichier) : une pièce dessinée dans un autre logiciel arrive sur le plateau, centrée et posée. Elle se déplace, se tourne, se perce et se contrôle comme les autres ; seule son <b>échelle</b> se règle.</p>
 <p><b>4. Percer et assembler.</b> Onglet <b>Modifier</b> : un élément passé en <b>Perçage</b> enlève de la matière aux éléments pleins qu’il traverse. <b>Fusionner</b> remplace tous les éléments par un seul maillage.</p>
 <p><b>5. Regarder.</b> Glisser : tourner la vue 3D. Clic droit ou <kbd>Maj</kbd> + glisser : déplacer la vue. Molette : zoom. Le <b>cube</b> en haut à droite de la vue 3D la tourne vers la face, le dessus, le côté.</p>
 <p><b>6. Plusieurs vues.</b> Onglet <b>Vue</b> : affiche 1, 2, 3 ou 4 fenêtres. Le <b>menu déroulant en haut à gauche</b> de chaque fenêtre choisit ce qu’elle montre : 3D, plan (dessus), face, arrière, côté droit, côté gauche ou <b>section</b>. Glisse les <b>séparateurs</b> entre les fenêtres pour les redimensionner. Les vues en plan, de face, de côté et la section sont sans perspective : on y glisse pour déplacer la vue, et on peut y sélectionner et déplacer les éléments comme en 3D.</p>
@@ -827,10 +883,10 @@
 <p><b>7. Imprimer.</b> Le volet <b>Impression 3D</b> dit si la pièce est imprimable. L’onglet <b>Imprimer</b> montre les couches et exporte le fichier STL.</p>
 <p><b>Raccourcis.</b> <kbd>Ctrl</kbd> + <kbd>Z</kbd> annuler · <kbd>Ctrl</kbd> + <kbd>Y</kbd> rétablir · <kbd>Ctrl</kbd> + <kbd>D</kbd> dupliquer · <kbd>Suppr</kbd> supprimer · <kbd>F</kbd> cadrer · <kbd>Échap</kbd> lâcher l’outil ou la sélection.</p>`;
   const APROPOS = `
-<p><b>Model Educ Studio est un outil pédagogique, pas un logiciel professionnel.</b> Il fait manipuler, dans une interface à ruban, sept méthodes de modélisation 3D et les règles de base de l’impression 3D. Il ne remplace ni un logiciel de CAO (Fusion 360, FreeCAD, Blender, Revit…), ni un trancheur (Cura, PrusaSlicer, Bambu Studio).</p>
+<p>Version ${VERSION}. <b>Model Educ Studio est un outil pédagogique, pas un logiciel professionnel.</b> Il fait manipuler, dans une interface à ruban, sept méthodes de modélisation 3D et les règles de base de l’impression 3D. Il ne remplace ni un logiciel de CAO (Fusion 360, FreeCAD, Blender, Revit…), ni un trancheur (Cura, PrusaSlicer, Bambu Studio).</p>
 <p><b>Ce que le contrôle vérifie.</b> Maillage étanche, dimensions et plateau, volume, surplombs à plus de 45°, surface de contact, morceaux séparés. <b>Ce qu’il ne vérifie pas :</b> l’épaisseur minimale des parois, les faces qui se traversent, les ponts. La masse est un ordre de grandeur (PLA à 1,24 g/cm³, coque de 0,8 mm, remplissage à 15 %).</p>
 <p><b>Limites des perçages et de la fusion.</b> Ces opérations booléennes sont calculées dans la page ; au-delà de ${LIMITE.toLocaleString('fr-FR')} triangles, elles ne sont pas appliquées et l’application le dit.</p>
-<p><b>Fichiers.</b> L’export STL est en millimètres. Le projet est gardé dans ce navigateur, sur cet ordinateur seulement ; « Enregistrer le projet » en fait un fichier. Rien n’est envoyé sur Internet.</p>
+<p><b>Fichiers.</b> Un STL inséré est lu en millimètres, jusqu’à ${MAX_STL.toLocaleString('fr-FR')} triangles ; un projet qui contient une grosse pièce importée peut ne pas tenir dans la mémoire du navigateur : enregistre-le en fichier. L’export STL est en millimètres. Le projet est gardé dans ce navigateur, sur cet ordinateur seulement ; « Enregistrer le projet » en fait un fichier. Rien n’est envoyé sur Internet.</p>
 <p><b>Fonctionnement.</b> Tout est calculé dans la page, sans bibliothèque extérieure : l’application marche aussi hors ligne, en ouvrant index.html.</p>
 <p>Sur une idée de <b>Jean-Philippe Amat</b>, lycée Urbain Vitry, Toulouse · Créateur : Claude. Licence Creative Commons <b>CC BY-NC-SA 4.0</b> : partage et adaptation autorisés, avec mention de l’auteur, sans usage commercial, sous la même licence.</p>`;
 
@@ -839,6 +895,7 @@
   const entree = (lib, raccourci, fn) => { const b = el('button'); b.type = 'button'; b.setAttribute('role', 'menuitem'); b.append(lib); if (raccourci) b.appendChild(el('small', '', raccourci)); b.addEventListener('click', () => { fermerMenu(); fn(); }); menu.appendChild(b); };
   entree('Nouveau projet', '', () => { if (confirmer()) nouveau('Sans titre'); });
   entree('Ouvrir un fichier…', '.json', () => { if (confirmer()) $('fichierOuvrir').click(); });
+  entree('Insérer un fichier STL…', '.stl', () => $('fichierSTL').click());
   entree('Enregistrer le projet', '.json', enregistrer);
   menu.appendChild(el('hr')); menu.appendChild(el('div', 'rubrique', 'Exemples'));
   for (const ex of EXEMPLES) entree(ex.nom, '', () => { if (confirmer()) nouveau(ex.nom, ex.faire); });
@@ -897,6 +954,7 @@
   }
   $('accNouveau').addEventListener('click', () => { if (confirmer()) nouveau('Sans titre'); });
   $('accReprendre').addEventListener('click', fermerFenetres);
+  $('accSTL').addEventListener('click', () => $('fichierSTL').click());
   for (const ex of EXEMPLES) { const b = el('button', '', '<b>' + ex.nom + '</b><span>' + ex.texte + '</span>'); b.type = 'button'; b.addEventListener('click', () => { if (confirmer()) nouveau(ex.nom, ex.faire); }); $('accExemples').appendChild(b); }
 
   /* ---------- démarrage ---------- */
@@ -907,5 +965,5 @@
   ouvrirAccueil();
 
   /* pour les essais */
-  app.essai = { etat: () => ({ P, sel, outil, onglet, analyse, notes, piece, annul: annul.length, retab: retab.length }), creer, selectionner, commande, installer, nouveau, verifier, EXEMPLES, prendreOutil, allerVue, cache, obj, vues, F, choisirVue, nbVues, setOnglet: k => { onglet = k; ruban(); } };
+  app.essai = { etat: () => ({ P, sel, outil, onglet, analyse, notes, piece, annul: annul.length, retab: retab.length }), creer, selectionner, commande, installer, nouveau, verifier, EXEMPLES, prendreOutil, allerVue, cache, obj, vues, F, choisirVue, nbVues, lireSTL, insererSTL, setOnglet: k => { onglet = k; ruban(); } };
 })(globalThis.ME = globalThis.ME || {});
