@@ -276,9 +276,13 @@
     const creux = vis.filter(o => o.role === 'creux'), pleins = vis.filter(o => o.role !== 'creux');
     notes = []; parts = [];
     for (const o of pleins) { const m = rapide ? cache(o).monde : final(o, creux); parts.push({ o, m, dec: 0 }); if (!rapide && cache(o).note) notes.push(cache(o).note); }
-    const v = [], f = [];
-    for (const p of parts) { const b = v.length / 3; p.dec = f.length / 3; const mv = p.m.v, mf = p.m.f; for (let i = 0; i < mv.length; i++) v.push(mv[i]); for (let i = 0; i < mf.length; i++) f.push(mf[i] + b); }
-    piece = { v, f };
+    if (parts.length === 1) piece = { v: parts[0].m.v, f: parts[0].m.f }; // une seule pièce : pas de copie (elle peut compter 400 000 triangles)
+    else {
+      let nv = 0, nf = 0; for (const p of parts) { nv += p.m.v.length; nf += p.m.f.length; }
+      const v = new Array(nv), f = new Array(nf); let iv = 0, jf = 0;
+      for (const p of parts) { const b = iv / 3, mv = p.m.v, mf = p.m.f; p.dec = jf / 3; for (let i = 0; i < mv.length; i++) v[iv++] = mv[i]; for (let i = 0; i < mf.length; i++) f[jf++] = mf[i] + b; }
+      piece = { v, f };
+    }
     analyse = M.analyser(piece, { plateau: reglages.plateau, couche: reglages.couche, rapide });
     const a = analyse, pl = reglages.plateau;
     if (!a.vide) {
@@ -313,7 +317,18 @@
     const morceaux = []; let n = 0; const voir = reglages.surplombs, s = a.surplomb;
     for (const p of parts) {
       const base = COULEURS[(p.o.coul || 0) % COULEURS.length], col = p.o.id === sel ? teinte(base) : base, dec = p.dec;
-      const t = M.tampons(p.m, p.m.lissage || 0, i => voir && s[dec + i] ? ROUGE : col); morceaux.push(t); n += t.P.length;
+      /* Pendant qu'on glisse un élément, sa forme ne change pas : on reprend ses triangles déjà préparés et on les décale,
+         au lieu de tout recalculer (indispensable pour une grosse pièce importée). */
+      const c = cache(p.o), cle = p.o.rot.join() + '|' + (p.o.coul || 0) + '|' + (p.o.id === sel) + '|' + voir, g = c.tamp; let t;
+      if (rapide && g && g.src === c.local && g.cle === cle && g.t.P.length === p.m.f.length * 3) {
+        const dx = p.o.pos[0] - g.pos[0], dy = p.o.pos[1] - g.pos[1], dz = p.o.pos[2] - g.pos[2], A = g.t.P, B = new Float32Array(A.length);
+        for (let i = 0; i < A.length; i += 3) { B[i] = A[i] + dx; B[i + 1] = A[i + 1] + dy; B[i + 2] = A[i + 2] + dz; }
+        t = { P: B, N: g.t.N, C: g.t.C };
+      } else {
+        t = M.tampons(p.m, p.m.lissage || 0, i => voir && s[dec + i] ? ROUGE : col);
+        c.tamp = p.m === c.monde ? { src: c.local, cle, t, pos: p.o.pos.slice() } : null; // un élément percé n'a plus la même forme : pas de reprise
+      }
+      morceaux.push(t); n += t.P.length;
     }
     const PP = new Float32Array(n), NN = new Float32Array(n), CC = new Float32Array(n); let k = 0;
     for (const t of morceaux) { PP.set(t.P, k); NN.set(t.N, k); CC.set(t.C, k); k += t.P.length; }
@@ -386,7 +401,11 @@
   /* ---------- valider un geste : annulation, sauvegarde, contrôle complet ---------- */
   app.valider = function () {
     const j = JSON.stringify(P);
-    if (j !== dernier) { annul.push(dernier); if (annul.length > 40) annul.shift(); retab = []; dernier = j; ecrire('projet', j); }
+    if (j !== dernier) {
+      annul.push(dernier); if (annul.length > 40) annul.shift(); retab = [];
+      /* avec une grosse pièce importée, chaque état pèse plusieurs Mo : on garde moins de retours en arrière */
+      let poids = 0; for (const a of annul) poids += a.length; while (poids > 60e6 && annul.length > 2) poids -= annul.shift().length;
+      dernier = j; ecrire('projet', j); }
     app.maj(false); majArbre(); majEtat(); ruban();
   };
   function remettre(j) { P = JSON.parse(j); dernier = j; ecrire('projet', j); insts.clear(); caches.clear(); if (!selO()) sel = null; tout(); }
@@ -804,7 +823,7 @@
   });
 
   /* ---------- insérer un fichier STL ---------- */
-  const MAX_STL = 60000; // triangles : au-delà, la page devient lente et le projet ne tient plus dans la mémoire du navigateur
+  const MAX_STL = 400000; // triangles : au-delà, la page devient trop lente
   /* Lit un STL binaire ou texte. Rend { v, f } (sommets soudés, pièce centrée et posée sur z = 0), { trop: n } ou null. */
   function lireSTL(buf) {
     const dv = new DataView(buf), nb = buf.byteLength >= 84 ? dv.getUint32(80, true) : -1; let t;
@@ -834,7 +853,7 @@
   }
   function insererSTL(fichier) {
     if (!fichier) return;
-    if (fichier.size > 40e6) return dire('Ce fichier est trop gros pour l’application (plus de 40 Mo).', true);
+    if (fichier.size > 150e6) return dire('Ce fichier est trop gros pour l’application (plus de 150 Mo).', true);
     const lecteur = new FileReader();
     lecteur.onload = () => {
       let m = null; try { m = lireSTL(lecteur.result); } catch (e) { m = null; }
@@ -847,6 +866,7 @@
       if (r < 1) o.etat.k = Math.max(5, Math.floor(r * 100 / 5) * 5);
       sel = o.id; outil = null; fermerFenetres(); app.valider(); app.panneau(); app.cadrer();
       const n = (m.f.length / 3).toLocaleString('fr-FR');
+      if (m.f.length / 3 > 100000 && r >= 1) return dire('STL inséré : ' + n + ' triangles. C’est une pièce lourde : les déplacements et le contrôle prennent une à deux secondes.', true);
       dire(r < 1 ? 'STL inséré (' + n + ' triangles). Il dépassait du plateau : son échelle est réglée à ' + o.etat.k + ' %.' : 'STL inséré : ' + n + ' triangles, lus en millimètres.', r < 1);
     };
     lecteur.onerror = () => dire('Le fichier n’a pas pu être lu.', true);

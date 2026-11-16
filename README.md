@@ -11,7 +11,7 @@ Atelier de modélisation 3D pour l’impression 3D, dans une interface « à rub
 - **Modifier** : dupliquer, supprimer, percer (un élément « perçage » enlève de la matière), fusionner, poser, centrer, tourner.
 - **Voir** : une à quatre fenêtres de vue redimensionnables ; dans chacune, un menu déroulant choisit la vue — 3D, plan (dessus), face, arrière, côté droit, côté gauche, section (coupe verticale réglable) ; styles ombré, arêtes, filaire ; surplombs en rouge.
 - **Imprimer** : contrôle d’imprimabilité (étanchéité, dimensions, surplombs, contact, morceaux), aperçu des couches, export STL en millimètres.
-- **Importer** : insérer un fichier `.stl` (binaire ou texte, jusqu’à 60 000 triangles) : la pièce arrive centrée sur le plateau, son échelle se règle.
+- **Importer** : insérer un fichier `.stl` (binaire ou texte, jusqu’à 400 000 triangles) : la pièce arrive centrée sur le plateau, son échelle se règle.
 - **Fichier** : nouveau, ouvrir, enregistrer (fichier `.modeleduc.json`), exemples.
 
 ## Fonctionnement
